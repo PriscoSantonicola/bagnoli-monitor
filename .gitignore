@@ -44,3 +44,5 @@ _deploy.py
 _github_create.py
 _*.py
 _*.html
+_*.txt
+_*.sql

@@ -49,7 +49,8 @@ async function loadData() {
     q<Kpi>(`
       SELECT
         COUNT(*)::int AS totale,
-        COUNT(*) FILTER (WHERE stato ILIKE 'avviat%')::int AS in_avanzamento,
+        COUNT(*) FILTER (WHERE COALESCE(percentuale_avanzamento,0) > 0
+                         AND percentuale_avanzamento < 100)::int AS in_avanzamento,
         COUNT(*) FILTER (WHERE percentuale_avanzamento >= 100)::int AS completati,
         COUNT(*) FILTER (WHERE COALESCE(percentuale_avanzamento,0) = 0)::int AS non_iniziati
       FROM bagnoli_cantieri.task WHERE versione_id = 1;
@@ -60,25 +61,48 @@ async function loadData() {
       FROM bagnoli_cantieri.task WHERE versione_id = 1;
     `),
     q<AreaRow>(`
+      WITH task_mapped AS (
+        SELECT
+          t.id,
+          t.percentuale_avanzamento,
+          CASE
+            WHEN w.nome = 'Infrastrutture' THEN 'Rigenerazione urbana'
+            ELSE w.nome
+          END AS macro_area
+        FROM bagnoli_cantieri.task t
+        LEFT JOIN bagnoli_cantieri.wbs w ON w.id = t.wbs_id
+        WHERE t.versione_id = 1
+      ),
+      cup_agg AS (
+        SELECT
+          c.macro_area,
+          COUNT(*)::int AS n_cup,
+          COALESCE(SUM(s.importo_intervento_eur),0)::numeric::float AS budget_eur
+        FROM bagnoli_cantieri.cup c
+        LEFT JOIN bagnoli_cantieri.sintesi_intervento s
+          ON s.cup_id = c.id AND s.versione_id = 1
+        GROUP BY c.macro_area
+      )
       SELECT
-        w.nome AS macro_area,
-        COUNT(t.id)::int AS totale,
-        COUNT(*) FILTER (WHERE t.percentuale_avanzamento >= 100)::int AS completati,
-        COUNT(*) FILTER (WHERE COALESCE(t.percentuale_avanzamento,0) > 0
-                          AND t.percentuale_avanzamento < 100)::int AS in_corso,
-        COUNT(*) FILTER (WHERE COALESCE(t.percentuale_avanzamento,0) = 0)::int AS da_avviare,
-        ROUND(AVG(COALESCE(t.percentuale_avanzamento,0))::numeric, 1)::float AS pct_medio,
-        (SELECT COUNT(*)::int FROM bagnoli_cantieri.cup c WHERE c.macro_area = w.nome) AS n_cup,
-        (SELECT COALESCE(SUM(s.importo_intervento_eur),0)::numeric::float
-           FROM bagnoli_cantieri.sintesi_intervento s
-           JOIN bagnoli_cantieri.cup c ON c.id = s.cup_id
-          WHERE c.macro_area = w.nome AND s.versione_id = 1) AS budget_eur
-      FROM bagnoli_cantieri.wbs w
-      LEFT JOIN bagnoli_cantieri.task t ON t.wbs_id = w.id AND t.versione_id = w.versione_id
-      WHERE w.versione_id = 1 AND w.livello = 1
-      GROUP BY w.nome, w.codice
+        tm.macro_area,
+        COUNT(tm.id)::int AS totale,
+        COUNT(*) FILTER (WHERE tm.percentuale_avanzamento >= 100)::int AS completati,
+        COUNT(*) FILTER (WHERE COALESCE(tm.percentuale_avanzamento,0) > 0
+                          AND tm.percentuale_avanzamento < 100)::int AS in_corso,
+        COUNT(*) FILTER (WHERE COALESCE(tm.percentuale_avanzamento,0) = 0)::int AS da_avviare,
+        ROUND(AVG(COALESCE(tm.percentuale_avanzamento,0))::numeric, 1)::float AS pct_medio,
+        COALESCE(ca.n_cup, 0)      AS n_cup,
+        COALESCE(ca.budget_eur, 0) AS budget_eur
+      FROM task_mapped tm
+      LEFT JOIN cup_agg ca ON ca.macro_area = tm.macro_area
+      GROUP BY tm.macro_area, ca.n_cup, ca.budget_eur
       ORDER BY
-        CASE w.codice WHEN 'RAM' THEN 1 WHEN 'RGU' THEN 2 WHEN 'INF' THEN 3 WHEN 'TRA' THEN 4 ELSE 5 END;
+        CASE tm.macro_area
+          WHEN 'Risanamento ambientale' THEN 1
+          WHEN 'Rigenerazione urbana' THEN 2
+          WHEN 'Attività Trasversali' THEN 3
+          ELSE 4
+        END;
     `),
     q<Finanze>(`
       SELECT
