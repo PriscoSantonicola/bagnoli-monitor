@@ -42,3 +42,5 @@ prisma/.env
 _setup_server.py
 _deploy.py
 _github_create.py
+_*.py
+_*.html

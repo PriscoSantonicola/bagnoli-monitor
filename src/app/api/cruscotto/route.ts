@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { q } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -7,29 +7,30 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     const [cupStats, taskStats, fonteStats, versioni] = await Promise.all([
-      prisma.$queryRawUnsafe<any[]>(
-        `SELECT COUNT(*)::int AS n_cup,
-                COUNT(*) FILTER (WHERE attivo)::int AS n_cup_attivi,
-                COUNT(DISTINCT macro_area)::int AS n_macro_aree
-         FROM bagnoli.cup`
-      ),
-      prisma.$queryRawUnsafe<any[]>(
-        `SELECT COUNT(*)::int AS n_task,
-                SUM(CASE WHEN fine_actual THEN 1 ELSE 0 END)::int AS n_completati,
-                SUM(CASE WHEN inizio_actual AND NOT fine_actual THEN 1 ELSE 0 END)::int AS n_in_corso,
-                SUM(CASE WHEN is_milestone THEN 1 ELSE 0 END)::int AS n_milestone
-         FROM bagnoli.task`
-      ),
-      prisma.$queryRawUnsafe<any[]>(
-        `SELECT COALESCE(SUM(importo_eur), 0)::numeric::float8 AS totale_eur,
-                COUNT(*)::int AS n_fonti
-         FROM bagnoli.fonte_finanziamento`
-      ),
-      prisma.$queryRawUnsafe<any[]>(
-        `SELECT codice, fonte, data_riferimento, is_ufficiale
-         FROM bagnoli.cronoprogramma_versione
-         ORDER BY data_riferimento DESC`
-      ),
+      q<any>(`
+        SELECT COUNT(*)::int AS n_cup,
+               COUNT(*) FILTER (WHERE attivo)::int AS n_cup_attivi,
+               COUNT(DISTINCT macro_area)::int AS n_macro_aree
+        FROM bagnoli_cantieri.cup
+      `),
+      q<any>(`
+        SELECT COUNT(*)::int AS n_task,
+               COUNT(*) FILTER (WHERE percentuale_avanzamento >= 100)::int AS n_completati,
+               COUNT(*) FILTER (WHERE COALESCE(percentuale_avanzamento,0) > 0
+                                 AND percentuale_avanzamento < 100)::int AS n_in_corso,
+               COUNT(*) FILTER (WHERE is_milestone)::int AS n_milestone
+        FROM bagnoli_cantieri.task
+      `),
+      q<any>(`
+        SELECT COALESCE(SUM(importo_eur), 0)::numeric::float8 AS totale_eur,
+               COUNT(*)::int AS n_fonti
+        FROM bagnoli_cantieri.fonte_finanziamento
+      `),
+      q<any>(`
+        SELECT codice, fonte, data_riferimento, is_ufficiale
+        FROM bagnoli_cantieri.cronoprogramma_versione
+        ORDER BY data_riferimento DESC
+      `),
     ]);
 
     return NextResponse.json({
