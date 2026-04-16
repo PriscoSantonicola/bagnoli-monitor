@@ -44,9 +44,15 @@ export function formatEuro(n: number | string | null | undefined, decimals = 0):
 export function formatMeur(n: number | null | undefined): string {
   if (n == null || Number.isNaN(n)) return "€ 0";
   const m = Number(n) / 1_000_000;
-  if (m >= 100)
-    return "€ " + m.toLocaleString("it-IT", { maximumFractionDigits: 0 }) + " M";
-  return "€ " + m.toLocaleString("it-IT", { maximumFractionDigits: 1 }) + " M";
+  // Sempre 1 decimale per mantenere fedelta' coi valori Excel (173,7 M / 443,2 M)
+  return (
+    "€ " +
+    m.toLocaleString("it-IT", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }) +
+    " M"
+  );
 }
 
 export function formatInt(n: number | null | undefined): string {
