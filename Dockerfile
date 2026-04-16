@@ -13,7 +13,8 @@ FROM base AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma
-RUN npm ci
+# Usa npm ci se lockfile presente, altrimenti npm install
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 # ---------- STAGE 2: build Next.js ----------
 FROM base AS builder
