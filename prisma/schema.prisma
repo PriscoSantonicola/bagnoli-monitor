@@ -1,0 +1,34 @@
+// =====================================================================
+// PLACEHOLDER — da rigenerare con `npx prisma db pull`
+// =====================================================================
+// Dopo aver configurato DATABASE_URL in .env, eseguire:
+//   npx prisma db pull
+//   npx prisma generate
+// per popolare tutti i model dal DB reale.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["bagnoli"]
+}
+
+model cronoprogramma_versione {
+  id               Int       @id @default(autoincrement())
+  codice           String    @unique @db.VarChar(30)
+  fonte            String    @db.VarChar(20)
+  versione_label   String?   @db.VarChar(50)
+  data_riferimento DateTime  @db.Date
+  data_import      DateTime? @default(now()) @db.Timestamptz(6)
+  file_origine     String?
+  hash_file        String?   @db.VarChar(64)
+  descrizione      String?
+  is_ufficiale     Boolean?  @default(false)
+  created_at       DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@schema("bagnoli")
+}

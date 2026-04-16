@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #f7f9fc;
+  --fg: #1a202c;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.card {
+  @apply bg-white rounded-xl border border-slate-200 shadow-sm p-5;
+}
+
+.kpi {
+  @apply flex flex-col gap-1;
+}
+.kpi-label { @apply text-xs uppercase tracking-wide text-slate-500; }
+.kpi-value { @apply text-3xl font-semibold text-slate-800; }
+.kpi-sub   { @apply text-sm text-slate-500; }

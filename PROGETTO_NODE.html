@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bagnoli Monitor — Node single container</title>
+<style>
+  :root{--primary:#0369a1;--primary-dark:#075985;--accent:#0ea5e9;--bg:#f8fafc;--card:#fff;--border:#e2e8f0;--text:#0f172a;--muted:#64748b;--ok:#16a34a;--warn:#d97706;--node:#339933}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.6}
+  header{background:linear-gradient(135deg,#0369a1,#075985 60%,#0c4a6e);color:white;padding:56px 24px;text-align:center}
+  header h1{margin:0 0 8px;font-size:2.2rem}
+  header p{margin:4px 0;opacity:0.92}
+  .badge{display:inline-block;background:rgba(255,255,255,0.2);padding:4px 12px;border-radius:12px;font-size:0.85rem;margin-top:12px}
+  .stack-badges{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:18px}
+  .stack-badges .b{background:rgba(255,255,255,0.15);padding:5px 12px;border-radius:18px;font-size:0.82rem;border:1px solid rgba(255,255,255,0.25)}
+  main{max-width:1100px;margin:-20px auto 48px;padding:0 24px}
+  section{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:28px;margin-bottom:18px;box-shadow:0 2px 6px rgba(0,0,0,0.04)}
+  h2{color:var(--primary-dark);margin-top:0;border-bottom:2px solid var(--border);padding-bottom:8px;font-size:1.35rem;display:flex;align-items:center;gap:10px}
+  h2 .num{background:var(--primary);color:white;width:30px;height:30px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:0.95rem;font-weight:600}
+  h3{color:var(--primary);margin-top:22px;font-size:1.05rem}
+  .grid{display:grid;gap:14px}
+  .grid-2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+  .grid-3{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+  .card{padding:16px;border:1px solid var(--border);border-radius:10px;background:#f8fafc}
+  .card h4{margin:0 0 6px;color:var(--primary-dark);font-size:0.98rem}
+  .card p{margin:0;font-size:0.88rem;color:var(--muted)}
+  .card.node{border-left:4px solid var(--node);background:#f0fdf4}
+  .card.accent{border-left:4px solid var(--accent);background:#f0f9ff}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:0.92rem}
+  th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--border);vertical-align:top}
+  th{background:#f1f5f9;font-weight:600;color:var(--primary-dark)}
+  code{background:#eef2ff;padding:2px 6px;border-radius:4px;font-size:0.88em;color:#4338ca}
+  pre{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:8px;overflow-x:auto;font-size:0.82rem;line-height:1.5}
+  pre code{background:transparent;color:inherit;padding:0}
+  .pill{display:inline-block;padding:3px 10px;border-radius:10px;font-size:0.78rem;font-weight:500}
+  .pill-ok{background:#dcfce7;color:var(--ok)}
+  .pill-info{background:#dbeafe;color:#1d4ed8}
+  .diagram{background:#0f172a;color:#94a3b8;padding:18px;border-radius:8px;font-family:ui-monospace,Menlo,monospace;font-size:0.82rem;line-height:1.55;white-space:pre;overflow-x:auto}
+  .diagram .hl{color:#38bdf8;font-weight:bold}
+  .diagram .ok{color:#4ade80}
+  .alert{padding:12px 16px;border-radius:8px;border-left:4px solid;margin:10px 0;font-size:0.92rem}
+  .alert-ok{background:#f0fdf4;border-color:var(--ok);color:#14532d}
+  .alert-info{background:#eff6ff;border-color:var(--accent);color:#1e40af}
+  ul.checklist{list-style:none;padding-left:0}
+  ul.checklist li{padding:5px 0 5px 24px;position:relative;font-size:0.94rem}
+  ul.checklist li::before{content:"✓";position:absolute;left:4px;color:var(--ok);font-weight:bold}
+  footer{text-align:center;color:var(--muted);font-size:0.85rem;padding:20px}
+  @media print{body{background:white}section{box-shadow:none;break-inside:avoid}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Bagnoli Monitor</h1>
+  <p>Applicazione Node.js single-container</p>
+  <p style="opacity:0.85;font-size:0.92rem;">PostgreSQL esterno · Solo lettura · Zero dipendenze ausiliarie</p>
+  <div class="stack-badges">
+    <span class="b">Next.js 14</span>
+    <span class="b">TypeScript</span>
+    <span class="b">Prisma</span>
+    <span class="b">Tailwind</span>
+    <span class="b">Docker single container</span>
+  </div>
+  <div class="badge">Approccio minimal · 17 aprile 2026</div>
+</header>
+
+<main>
+
+<!-- ============= -->
+<section>
+  <h2><span class="num">1</span>Cosa costruiamo (e cosa NO)</h2>
+
+  <div class="grid grid-2">
+    <div class="card node">
+      <h4>✅ Dentro il container</h4>
+      <ul style="margin:8px 0 0 18px;padding:0;font-size:0.9rem;color:var(--muted);">
+        <li>App Next.js (frontend React + API routes)</li>
+        <li>Connessione al tuo PostgreSQL via <code>DATABASE_URL</code></li>
+        <li>6 viste pubbliche + dettaglio CUP</li>
+        <li>Unico processo Node, unica porta esposta</li>
+      </ul>
+    </div>
+    <div class="card" style="border-left:4px solid #dc2626;background:#fef2f2">
+      <h4>❌ FUORI dal container</h4>
+      <ul style="margin:8px 0 0 18px;padding:0;font-size:0.9rem;color:var(--muted);">
+        <li>PostgreSQL (è il tuo server, già esistente)</li>
+        <li>Nessun importer PDF/Excel</li>
+        <li>Nessun Redis, Celery, worker, cron</li>
+        <li>Nessun admin panel complesso</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="alert alert-info">
+    <strong>Il DB lo popoli tu/admin</strong> (manualmente, con script tuoi, o come preferisci).
+    L'app Node <em>legge e basta</em>. Nessuna dipendenza di import, nessuna logica di parsing.
+  </div>
+</section>
+
+<!-- ============= -->
+<section>
+  <h2><span class="num">2</span>Architettura</h2>
+
+  <div class="diagram">
+ <span class="hl">INTERNET (cittadini)</span>
+        │
+        ▼
+ ┌──────────────────────────┐
+ │  <span class="ok">NGINX aaPanel + SSL</span>     │  monitoraggio.analist24.it.com
+ │  (già sul server)        │
+ └────────────┬─────────────┘
+              │ proxy_pass :3000
+              ▼
+ ┌──────────────────────────┐
+ │  <span class="ok">CONTAINER Node.js</span>        │  docker run -p 3000:3000
+ │  Next.js 14 standalone   │  env: DATABASE_URL=postgres://...
+ │                          │
+ │  - /         (SSR React) │
+ │  - /api/*   (DB queries) │
+ │  - static assets         │
+ └────────────┬─────────────┘
+              │ postgres://
+              ▼
+ ┌──────────────────────────┐
+ │  <span class="ok">PostgreSQL (tuo)</span>        │  già installato sul server
+ │  — fuori dal container   │  porta 5432 localhost
+ │  — popolato da te/admin  │
+ └──────────────────────────┘
+  </div>
+
+  <p><strong>1 container. 1 processo. 1 env var che conta: <code>DATABASE_URL</code>.</strong></p>
+</section>
+
+<!-- ============= -->
+<section>
+  <h2><span class="num">3</span>Perché Next.js 14</h2>
+
+  <p>Serve un framework Node che sia <strong>frontend + API in un solo processo</strong>. Le alternative valutate:</p>
+
+  <table>
+    <thead><tr><th>Opzione</th><th>Pro</th><th>Contro</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Next.js 14</strong> ⭐</td>
+        <td>SSR + API routes + static in un unico server Node. TypeScript nativo. SEO friendly. Community enorme.</td>
+        <td>Leggermente più opinionated</td>
+      </tr>
+      <tr>
+        <td>Express + React SPA</td>
+        <td>Massimo controllo, flessibile</td>
+        <td>Serve configurare tante cose (routing, bundler, SSR)</td>
+      </tr>
+      <tr>
+        <td>NestJS + Angular</td>
+        <td>Strutturato, simile a progetti tuoi esistenti (GCS)</td>
+        <td>Due build separate, più pesante per il caso single-container</td>
+      </tr>
+      <tr>
+        <td>Remix / SvelteKit</td>
+        <td>Moderni, veloci</td>
+        <td>Ecosistema più piccolo</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="alert alert-ok">
+    <strong>Raccomandazione: Next.js 14 App Router con TypeScript.</strong>
+    Copre tutto (frontend + API + static + SSR) con un singolo <code>npm run start</code>.
+    Perfetto per "container Node unico".
+  </div>
+</section>
+
+<!-- ============= -->
+<section>
+  <h2><span class="num">4</span>Struttura progetto</h2>
+
+<pre><code>bagnoli-monitor/
+├── Dockerfile
+├── .dockerignore
+├── .env.example
+├── package.json
+├── tsconfig.json
+├── next.config.mjs
+├── tailwind.config.ts
+│
+├── prisma/
+│   └── schema.prisma            # mappatura tabelle del TUO DB
+│
+├── src/
+│   ├── app/                     # Next.js App Router
+│   │   ├── layout.tsx
+│   │   ├── page.tsx             # HOME — Cruscotto con gauge
+│   │   ├── cronoprogramma/
+│   │   │   └── page.tsx         # Tabella task + filtri
+│   │   ├── gantt/
+│   │   │   └── page.tsx         # Gantt interattivo
+│   │   ├── scadenze/
+│   │   │   └── page.tsx         # Tab GO / STOP
+│   │   ├── milestone/
+│   │   │   └── page.tsx         # Timeline verticale
+│   │   ├── mappa/
+│   │   │   └── page.tsx         # Leaflet + GeoJSON
+│   │   ├── cup/
+│   │   │   └── [codice]/page.tsx # Dettaglio CUP
+│   │   └── api/                 # API routes (read-only)
+│   │       ├── cruscotto/route.ts
+│   │       ├── cronoprogramma/route.ts
+│   │       ├── scadenze/[tipo]/route.ts
+│   │       ├── milestone/route.ts
+│   │       ├── gantt/route.ts
+│   │       └── cup/[codice]/route.ts
+│   │
+│   ├── components/              # shadcn/ui + custom
+│   │   ├── ui/                  # button, card, table, ...
+│   │   ├── GaugeSvg.tsx
+│   │   ├── KpiCard.tsx
+│   │   ├── GanttChart.tsx       # wrapper frappe-gantt
+│   │   ├── TimelineMilestone.tsx
+│   │   └── MappaLeaflet.tsx
+│   │
+│   ├── lib/
+│   │   ├── db.ts                # PrismaClient singleton
+│   │   └── queries/             # query helpers
+│   │
+│   └── styles/
+│       └── globals.css          # Tailwind imports
+│
+└── public/                      # immagini, favicon</code></pre>
+</section>
+
+<!-- ============= -->
+<section>
+  <h2><span class="num">5</span>Connessione al tuo PostgreSQL</h2>
+
+  <h3>Una sola variabile ambiente</h3>
+<pre><code># .env
+DATABASE_URL="postgresql://bagnoli_ro:password@host.docker.internal:5432/bagnoli?schema=bagnoli"
+NEXT_PUBLIC_SITE_URL="https://monitoraggio.analist24.it.com"</code></pre>
+
+  <p>
+    <code>host.docker.internal</code> permette al container di raggiungere il Postgres
+    che gira sull'host fuori da Docker. In alternativa <code>network_mode: host</code>.
+  </p>
+
+  <h3>Prisma schema (mappa le tue tabelle)</h3>
+<pre><code class="lang-typescript">// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Cup {
+  id             Int      @id @default(autoincrement())
+  codice         String   @unique
+  titolo         String
+  tipo           String
+  macro_area     String?
+  tematica       String?
+  attivo         Boolean  @default(true)
+  tasks          Task[]
+
+  @@map("cup")
+  @@schema("bagnoli")
+}
+
+model Task {
+  id             Int       @id @default(autoincrement())
+  versione_id    Int
+  cup_id         Int?
+  activity_id    String?
+  activity_name  String
+  durata_giorni  Int?
+  data_inizio    DateTime?
+  data_fine      DateTime?
+  inizio_actual  Boolean   @default(false)
+  fine_actual    Boolean   @default(false)
+  is_milestone   Boolean   @default(false)
+  cup            Cup?      @relation(fields: [cup_id], references: [id])
+
+  @@map("task")
+  @@schema("bagnoli")
+}
+// ... altri modelli che riflettono il tuo schema_postgres.sql
+</code></pre>
+
+  <div class="alert alert-info">
+    Prisma <strong>non modifica il DB</strong> (usiamo <code>prisma db pull</code> dopo che hai creato lo schema).
+    L'app è read-only: nessun <code>CREATE</code>, nessun <code>ALTER</code>, nessun <code>INSERT</code>.
+  </div>
+</section>
+
+<!-- ============= -->
+<section>
+  <h2><span class="num">6</span>Esempio: API route e pagina</h2>
+
+  <h3>API route read-only (Next.js App Router)</h3>
+<pre><code class="lang-typescript">// src/app/api/cruscotto/route.ts
+import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/db';
+
+export const revalidate = 300; // cache 5 min
+
+export async function GET() {
+  const [nCup, tasksTot, tasksCompl] = await Promise.all([
+    prisma.cup.count({ where: { attivo: true } }),
+    prisma.task.count(),
+    prisma.task.count({ where: { fine_actual: true } }),
+  ]);
+
+  return NextResponse.json({
+    n_cup: nCup,
+    task_totali: tasksTot,
+    task_completati: tasksCompl,
+    pct_completamento: tasksTot ? Math.round(100 * tasksCompl / tasksTot) : 0,
+  });
+}
+</code></pre>
+
+  <h3>Pagina che la consuma (Server Component)</h3>
+<pre><code class="lang-typescript">// src/app/page.tsx
+import { GaugeSvg } from '@/components/GaugeSvg';
+import { KpiCard } from '@/components/KpiCard';
+import { prisma } from '@/lib/db';
+
+export default async function HomePage() {
+  const [nCup, tasksTot, tasksCompl] = await Promise.all([
+    prisma.cup.count({ where: { attivo: true } }),
+    prisma.task.count(),
+    prisma.task.count({ where: { fine_actual: true } }),
+  ]);
+  const pct = tasksTot ? Math.round(100 * tasksCompl / tasksTot) : 0;
+
+  return (
+    &lt;main className=&quot;hero&quot;&gt;
+      &lt;h1&gt;Programma Bagnoli-Coroglio&lt;/h1&gt;
+      &lt;GaugeSvg value={pct} size={200} /&gt;
+      &lt;div className=&quot;kpi-grid&quot;&gt;
+        &lt;KpiCard label=&quot;CUP attivi&quot; value={nCup} /&gt;
+        &lt;KpiCard label=&quot;Task completati&quot; value={tasksCompl} /&gt;
+        &lt;KpiCard label=&quot;Task totali&quot; value={tasksTot} /&gt;
+      &lt;/div&gt;
+    &lt;/main&gt;
+  );
+}
+</code></pre>
+</section>
+
+<!-- ============= -->
+<section>
+  <h2><span class="num">7</span>Dockerfile (multi-stage, 1 container)</h2>
+
+<pre><code class="lang-dockerfile"># Dockerfile
+FROM node:20-alpine AS base
+RUN apk add --no-cache libc6-compat
+
+# ---- deps ----
+FROM base AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY prisma ./prisma
+RUN npm ci
+
+# ---- build ----
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN npx prisma generate
+RUN npm run build
+
+# ---- runtime ----
+FROM base AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=3000
+
+RUN addgroup --system --gid 1001 nodejs \
+ && adduser  --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+EXPOSE 3000
+CMD ["node", "server.js"]
+</code></pre>
+
+  <p>
+    Usa <code>output: 'standalone'</code> in <code>next.config.mjs</code> → l'immagine finale pesa
+    <strong>~150-180 MB</strong> e non contiene sorgenti né <code>node_modules</code> di dev.
+  </p>
+</section>
+
+<!-- ============= -->
+<section>
+  <h2><span class="num">8</span>Deploy — 3 comandi</h2>
+
+<pre><code class="lang-bash"># Sul server aaPanel:
+cd /www/wwwroot/bagnoli-monitor
+
+# 1. pull dal git
+git pull origin main
+
+# 2. build + run container
+docker build -t bagnoli-monitor:latest .
+docker stop bagnoli-monitor 2>/dev/null; docker rm bagnoli-monitor 2>/dev/null
+docker run -d --name bagnoli-monitor \
+  --restart unless-stopped \
+  -p 127.0.0.1:3000:3000 \
+  --add-host=host.docker.internal:host-gateway \
+  --env-file /www/wwwroot/bagnoli-monitor/.env \
+  bagnoli-monitor:latest
+
+# 3. nginx aaPanel fa SSL + proxy → 127.0.0.1:3000
+# (vhost gestito dal pannello o /www/server/panel/vhost/nginx/monitoraggio.conf)</code></pre>
+
+  <h3>Nginx esterno (aaPanel)</h3>
+<pre><code class="lang-nginx">server {
+    listen 443 ssl http2;
+    server_name monitoraggio.analist24.it.com;
+
+    ssl_certificate     /etc/letsencrypt/live/monitoraggio.analist24.it.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/monitoraggio.analist24.it.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}</code></pre>
+</section>
+
+<!-- ============= -->
+<section>
+  <h2><span class="num">9</span>Le 6 viste citizen-facing</h2>
+  <div class="grid grid-3">
+    <div class="card accent"><h4>🏠 Home / Cruscotto</h4><p>Hero gauge + KPI. Legge aggregati dal DB.</p></div>
+    <div class="card accent"><h4>📋 Cronoprogramma</h4><p>Tabella task filtrabile con virtual scroll.</p></div>
+    <div class="card accent"><h4>📊 Gantt</h4><p>frappe-gantt interattivo, zoom giornaliero/mensile.</p></div>
+    <div class="card accent"><h4>🚦 Scadenze GO/STOP</h4><p>Due tab: prossimi 90gg / in ritardo.</p></div>
+    <div class="card accent"><h4>🏁 Milestone</h4><p>Timeline verticale con filtro anno/area.</p></div>
+    <div class="card accent"><h4>🗺️ Mappa GIS</h4><p>Leaflet con marker e poligoni dal DB PostGIS.</p></div>
+  </div>
+</section>
+
+<!-- ============= -->
+<section>
+  <h2><span class="num">10</span>Roadmap (ridotta drasticamente)</h2>
+
+  <table>
+    <thead><tr><th>Sprint</th><th>Giorni</th><th>Deliverable</th></tr></thead>
+    <tbody>
+      <tr><td>Sprint 0 — Setup</td><td>1</td><td>Repo git, Next.js scaffold, Prisma init, connessione al tuo DB</td></tr>
+      <tr><td>Sprint 1 — Home + Cronoprogramma</td><td>3</td><td>Hero cruscotto, tabella task con filtri</td></tr>
+      <tr><td>Sprint 2 — Scadenze + Milestone</td><td>2</td><td>GO/STOP tab, timeline</td></tr>
+      <tr><td>Sprint 3 — Gantt + CUP detail</td><td>3</td><td>frappe-gantt wrapper, pagina dettaglio</td></tr>
+      <tr><td>Sprint 4 — Mappa GIS</td><td>2</td><td>Leaflet + GeoJSON</td></tr>
+      <tr><td>Sprint 5 — Dockerizzazione + deploy</td><td>1-2</td><td>Dockerfile, deploy aaPanel, SSL, DNS</td></tr>
+      <tr style="background:#f0f9ff"><td colspan="2"><strong>TOTALE</strong></td><td><strong>~2 settimane</strong></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============= -->
+<section>
+  <h2><span class="num">11</span>Cosa mi serve da te</h2>
+
+  <ul class="checklist">
+    <li><strong>DB Postgres accessibile</strong>: host, porta, credenziali utente <em>read-only</em> dedicato per l'app</li>
+    <li><strong>Schema delle tabelle</strong>: il <code>schema_postgres.sql</code> che già abbiamo, o quello che crei tu</li>
+    <li><strong>DB popolato</strong>: almeno con dati di test per vedere i render</li>
+    <li><strong>DNS</strong>: <code>monitoraggio.analist24.it.com</code> → IP server</li>
+    <li><strong>Repository git</strong>: GitHub (o altro) dove pushare</li>
+    <li><strong>Conferma</strong> che l'app deve essere solo read-only (nessun form di inserimento)</li>
+  </ul>
+</section>
+
+</main>
+
+<footer>
+  Bagnoli Monitor — proposta semplificata v2.0 &middot; 17 aprile 2026<br>
+  Allegati: <code>Dockerfile</code>, <code>docker-run.sh</code>, <code>.env.example</code>, <code>README.md</code>
+</footer>
+
+</body>
+</html>
