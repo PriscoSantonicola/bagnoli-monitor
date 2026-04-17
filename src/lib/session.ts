@@ -16,12 +16,12 @@ function b64urlEncode(buf: ArrayBuffer | Uint8Array): string {
   return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-function b64urlDecode(s: string): ArrayBuffer {
+function b64urlDecode(s: string): Uint8Array {
   const pad = s.length % 4 === 0 ? 0 : 4 - (s.length % 4);
   const b = atob(s.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat(pad));
-  const bytes = new Uint8Array(new ArrayBuffer(b.length));
+  const bytes = new Uint8Array(b.length);
   for (let i = 0; i < b.length; i++) bytes[i] = b.charCodeAt(i);
-  return bytes.buffer;
+  return bytes;
 }
 
 async function getKey(secret: string) {
@@ -60,7 +60,13 @@ export async function verifyToken(
   try {
     const key = await getKey(secret);
     const sigBuf = b64urlDecode(sigB64);
-    const ok = await crypto.subtle.verify("HMAC", key, sigBuf, enc.encode(body));
+    // Cast esplicito a BufferSource per placare il TS 5.x
+    const ok = await crypto.subtle.verify(
+      "HMAC",
+      key,
+      sigBuf as BufferSource,
+      enc.encode(body) as BufferSource
+    );
     if (!ok) {
       console.log("[verify] sig mismatch bodyLen=", body.length, " sigLen=", sigB64.length);
       return null;
