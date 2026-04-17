@@ -60,14 +60,7 @@ export default async function CronoPage() {
       title="CronoProgramma"
       subtitle="Albero gerarchico delle attività — replica sheet Excel «CronoProgramma»"
     >
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-          gap: 10,
-          marginBottom: 16,
-        }}
-      >
+      <div className="adm-stat-grid">
         <Stat label="Righe totali" value={rows.length} color="#2563eb" />
         <Stat label="Nodi livello 1" value={nLiv1} color="#16a34a" />
         <Stat label="Nodi livello 2" value={nLiv2} color="#f59e0b" />
@@ -104,24 +97,8 @@ export default async function CronoPage() {
       </div>
 
       {/* Tabella gerarchica */}
-      <div
-        style={{
-          background: "#fff",
-          border: "1px solid var(--border)",
-          borderRadius: 8,
-          overflow: "auto",
-          maxHeight: "75vh",
-          boxShadow: "var(--shadow)",
-        }}
-      >
-        <table
-          style={{
-            width: "100%",
-            minWidth: 1400,
-            borderCollapse: "collapse",
-            fontSize: 12,
-          }}
-        >
+      <div className="adm-table-wrap">
+        <table className="adm-table" style={{ minWidth: 1400 }}>
           <thead style={{ position: "sticky", top: 0, zIndex: 2, background: "#f1f5f9" }}>
             <tr>
               <Th>ID</Th>
@@ -238,26 +215,9 @@ export default async function CronoPage() {
 
 function Stat({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div
-      style={{
-        background: "#fff",
-        border: "1px solid var(--border)",
-        borderRadius: 10,
-        padding: 14,
-        borderLeft: `4px solid ${color}`,
-      }}
-    >
-      <div
-        style={{
-          fontSize: 10,
-          textTransform: "uppercase",
-          color: "var(--text3)",
-          letterSpacing: ".5px",
-        }}
-      >
-        {label}
-      </div>
-      <div style={{ fontSize: 24, fontWeight: 800, color }}>{value}</div>
+    <div className="adm-statbox" style={{ borderLeftColor: color }}>
+      <div className="lbl">{label}</div>
+      <div className="val" style={{ color }}>{value}</div>
     </div>
   );
 }
@@ -279,40 +239,11 @@ function Dot({ c }: { c: string }) {
 }
 
 function Th({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return (
-    <th
-      style={{
-        textAlign: "left",
-        padding: "8px 10px",
-        borderBottom: "2px solid #cbd5e1",
-        borderRight: "1px solid #e2e8f0",
-        fontSize: 10,
-        textTransform: "uppercase",
-        color: "#64748b",
-        fontWeight: 700,
-        letterSpacing: ".4px",
-        whiteSpace: "nowrap",
-        ...style,
-      }}
-    >
-      {children}
-    </th>
-  );
+  return <th style={style}>{children}</th>;
 }
 
 function Td({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return (
-    <td
-      style={{
-        padding: "6px 10px",
-        borderRight: "1px solid #f1f5f9",
-        verticalAlign: "top",
-        ...style,
-      }}
-    >
-      {children}
-    </td>
-  );
+  return <td style={style}>{children}</td>;
 }
 
 function short(s: string | null): string {

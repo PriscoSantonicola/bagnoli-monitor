@@ -57,17 +57,9 @@ export async function ScadenzeView({ tipo }: { tipo: "GO" | "STOP" }) {
         </span>
       </div>
 
-      <div
-        style={{
-          background: "#fff",
-          border: "1px solid var(--border)",
-          borderRadius: 8,
-          overflow: "auto",
-          boxShadow: "var(--shadow)",
-        }}
-      >
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-          <thead style={{ background: "#f1f5f9" }}>
+      <div className="adm-table-wrap">
+        <table className="adm-table" style={{ minWidth: 800 }}>
+          <thead>
             <tr>
               <Th style={{ minWidth: 110 }}>{dateCol}</Th>
               <Th>A - Procedimento</Th>
@@ -107,39 +99,11 @@ export async function ScadenzeView({ tipo }: { tipo: "GO" | "STOP" }) {
 }
 
 function Th({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return (
-    <th
-      style={{
-        textAlign: "left",
-        padding: "10px 12px",
-        borderBottom: "2px solid #cbd5e1",
-        borderRight: "1px solid #e2e8f0",
-        fontSize: 10,
-        textTransform: "uppercase",
-        color: "#64748b",
-        fontWeight: 700,
-        letterSpacing: ".4px",
-        ...style,
-      }}
-    >
-      {children}
-    </th>
-  );
+  return <th style={style}>{children}</th>;
 }
 
 function Td({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return (
-    <td
-      style={{
-        padding: "8px 12px",
-        borderRight: "1px solid #f1f5f9",
-        verticalAlign: "top",
-        ...style,
-      }}
-    >
-      {children}
-    </td>
-  );
+  return <td style={style}>{children}</td>;
 }
 
 function short(s: string | null): string {

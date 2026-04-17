@@ -147,17 +147,8 @@ export default async function Page() {
         </span>
       </div>
 
-      <div
-        style={{
-          background: "#fff",
-          border: "1px solid var(--border)",
-          borderRadius: 8,
-          overflow: "auto",
-          boxShadow: "var(--shadow)",
-          maxHeight: "80vh",
-        }}
-      >
-        <div style={{ minWidth: 1800, position: "relative" }}>
+      <div className="gt-wrap">
+        <div className="gt-inner">
           {/* Header anni */}
           <div
             style={{

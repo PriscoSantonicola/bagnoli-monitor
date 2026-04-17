@@ -124,33 +124,8 @@ export default async function Page() {
       </div>
 
       {/* SVG Timeline */}
-      <div
-        style={{
-          background: "#fff",
-          border: "1px solid var(--border)",
-          borderRadius: 8,
-          padding: 16,
-          overflow: "auto",
-          marginBottom: 14,
-          boxShadow: "var(--shadow)",
-          position: "relative",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            top: 12,
-            right: 12,
-            background: "#0ea5e9",
-            color: "#fff",
-            padding: "6px 16px",
-            borderRadius: 4,
-            fontWeight: 800,
-            fontSize: 14,
-          }}
-        >
-          Milestone
-        </div>
+      <div className="ms-timeline-wrap">
+        <div className="ms-badge">Milestone</div>
 
         <svg
           width={SVG_W}
@@ -248,17 +223,9 @@ export default async function Page() {
       </div>
 
       {/* Tabella dettaglio milestone */}
-      <div
-        style={{
-          background: "#fff",
-          border: "1px solid var(--border)",
-          borderRadius: 8,
-          overflow: "auto",
-          boxShadow: "var(--shadow)",
-        }}
-      >
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-          <thead style={{ background: "#f1f5f9" }}>
+      <div className="adm-table-wrap">
+        <table className="adm-table" style={{ minWidth: 900 }}>
+          <thead>
             <tr>
               <Th>Obiettivo Generale</Th>
               <Th>Obiettivi Specifici</Th>
@@ -304,37 +271,9 @@ export default async function Page() {
 }
 
 function Th({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return (
-    <th
-      style={{
-        textAlign: "left",
-        padding: "10px 12px",
-        borderBottom: "2px solid #cbd5e1",
-        borderRight: "1px solid #e2e8f0",
-        fontSize: 10,
-        textTransform: "uppercase",
-        color: "#64748b",
-        fontWeight: 700,
-        letterSpacing: ".4px",
-        whiteSpace: "nowrap",
-        ...style,
-      }}
-    >
-      {children}
-    </th>
-  );
+  return <th style={style}>{children}</th>;
 }
 
 function Td({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return (
-    <td
-      style={{
-        padding: "8px 12px",
-        borderRight: "1px solid #f1f5f9",
-        ...style,
-      }}
-    >
-      {children}
-    </td>
-  );
+  return <td style={style}>{children}</td>;
 }

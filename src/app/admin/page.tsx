@@ -116,20 +116,21 @@ export default async function AdminPage() {
         </div>
       </header>
 
-      <div className="container" style={{ padding: "32px 24px" }}>
+      <div className="container adm-container">
         {/* Sintesi */}
         <section
           style={{
             background: "#fff",
             border: "1px solid var(--border)",
             borderRadius: "var(--radius)",
-            padding: 20,
+            padding: 16,
             boxShadow: "var(--shadow)",
-            marginBottom: 24,
+            marginBottom: 18,
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
-            gap: 14,
+            gridTemplateColumns: "repeat(2, 1fr)",
+            gap: 12,
           }}
+          className="adm-index-stats"
         >
           <Mini label="Task Cruscotto"    value={formatInt(stats.n_cruscotto)} />
           <Mini label="Righe CronoProg."  value={formatInt(stats.n_crono)} />
@@ -144,9 +145,9 @@ export default async function AdminPage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill,minmax(320px,1fr))",
-            gap: 18,
+            gap: 14,
           }}
+          className="adm-index-grid"
         >
           {SHEETS.map((s) => (
             <Link
