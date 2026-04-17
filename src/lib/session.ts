@@ -16,12 +16,12 @@ function b64urlEncode(buf: ArrayBuffer | Uint8Array): string {
   return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-function b64urlDecode(s: string): Uint8Array {
+function b64urlDecode(s: string): ArrayBuffer {
   const pad = s.length % 4 === 0 ? 0 : 4 - (s.length % 4);
   const b = atob(s.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat(pad));
-  const bytes = new Uint8Array(b.length);
+  const bytes = new Uint8Array(new ArrayBuffer(b.length));
   for (let i = 0; i < b.length; i++) bytes[i] = b.charCodeAt(i);
-  return bytes;
+  return bytes.buffer;
 }
 
 async function getKey(secret: string) {
@@ -63,7 +63,9 @@ export async function verifyToken(
       enc.encode(body)
     );
     if (!ok) return null;
-    const data = JSON.parse(dec.decode(b64urlDecode(body))) as SessionPayload;
+    const data = JSON.parse(
+      new TextDecoder().decode(new Uint8Array(b64urlDecode(body)))
+    ) as SessionPayload;
     if (!data.exp || typeof data.exp !== "number" || data.exp < Date.now()) {
       return null;
     }
