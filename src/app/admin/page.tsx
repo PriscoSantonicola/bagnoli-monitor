@@ -1,66 +1,96 @@
 import Link from "next/link";
 import { q } from "@/lib/db";
-import { formatInt, formatMeur, formatPct } from "@/lib/format";
+import { formatInt, formatMeur } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-type SheetRow = {
-  id: number;
-  sheet_name: string;
-  ordine: number;
-  nrows: number;
-  ncols: number;
-  imported_at: string;
+type Stats = {
+  n_cruscotto: number;
+  n_crono: number;
+  n_sca_go: number;
+  n_sca_stop: number;
+  n_milestone: number;
+  n_gantt: number;
+  n_gantt_with_ranges: number;
+  tot_budget: number;
 };
 
-type GlobalStats = {
-  tot_cup: number;
-  tot_task: number;
-  tot_gare: number;
-  tot_fonti: number;
-  tot_finanziamenti: number;
-  pct_medio: number;
-  tot_sheet: number;
-  tot_excel_row: number;
-};
-
-async function loadAdmin() {
-  const [sheets, globalStats] = await Promise.all([
-    q<SheetRow>(`
-      SELECT id, sheet_name, ordine, nrows, ncols,
-             imported_at::text AS imported_at
-      FROM bagnoli_cantieri.excel_sheet
-      ORDER BY ordine, sheet_name;
-    `),
-    q<GlobalStats>(`
-      SELECT
-        (SELECT COUNT(*)::int FROM bagnoli_cantieri.cup)                                  AS tot_cup,
-        (SELECT COUNT(*)::int FROM bagnoli_cantieri.task WHERE versione_id=1)             AS tot_task,
-        (SELECT COUNT(*)::int FROM bagnoli_cantieri.attivita_gara WHERE versione_id=1)    AS tot_gare,
-        (SELECT COUNT(*)::int FROM bagnoli_cantieri.fonte_finanziamento WHERE versione_id=1) AS tot_fonti,
-        (SELECT COALESCE(SUM(importo_eur),0)::numeric::float
-           FROM bagnoli_cantieri.fonte_finanziamento WHERE versione_id=1)                 AS tot_finanziamenti,
-        (SELECT COALESCE(AVG(percentuale_avanzamento),0)::numeric::float
-           FROM bagnoli_cantieri.task WHERE versione_id=1)                                AS pct_medio,
-        (SELECT COUNT(*)::int FROM bagnoli_cantieri.excel_sheet)                          AS tot_sheet,
-        (SELECT COUNT(*)::int FROM bagnoli_cantieri.excel_row)                            AS tot_excel_row;
-    `),
-  ]);
-  return { sheets, stats: globalStats[0] };
+async function loadStats(): Promise<Stats> {
+  const [r] = await q<Stats>(`
+    SELECT
+      (SELECT COUNT(*)::int FROM bagnoli_cantieri.cruscotto_task) AS n_cruscotto,
+      (SELECT COUNT(*)::int FROM bagnoli_cantieri.crono_task)      AS n_crono,
+      (SELECT COUNT(*)::int FROM bagnoli_cantieri.scadenza WHERE tipo='GO')   AS n_sca_go,
+      (SELECT COUNT(*)::int FROM bagnoli_cantieri.scadenza WHERE tipo='STOP') AS n_sca_stop,
+      (SELECT COUNT(*)::int FROM bagnoli_cantieri.milestone_point) AS n_milestone,
+      (SELECT COUNT(*)::int FROM bagnoli_cantieri.gantt_row)       AS n_gantt,
+      (SELECT COUNT(*)::int FROM bagnoli_cantieri.gantt_row WHERE jsonb_array_length(ranges)>0) AS n_gantt_with_ranges,
+      (SELECT COALESCE(SUM(importo_eur),0)::numeric::float
+         FROM bagnoli_cantieri.fonte_finanziamento WHERE versione_id=1) AS tot_budget
+  `);
+  return r;
 }
 
-function slugify(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/à/g, "a").replace(/è/g, "e").replace(/é/g, "e")
-    .replace(/ì/g, "i").replace(/ò/g, "o").replace(/ù/g, "u")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
+const SHEETS = [
+  {
+    slug: "cruscotto",
+    name: "Cruscotto",
+    icon: "fa-tachometer-alt",
+    color: "#2563eb",
+    desc: "Dashboard Excel: header Commissario, filtri PRARU/Territorio/Procedimento, KPI MILESTONE e Avanzamento Attività, tabella 22 task con % e mini-Gantt.",
+    key: "n_cruscotto" as const,
+    label: "task",
+  },
+  {
+    slug: "cronoprogramma",
+    name: "CronoProgramma",
+    icon: "fa-project-diagram",
+    color: "#0ea5e9",
+    desc: "Albero gerarchico degli ID (6, 6.1, 6.2…) con Obiettivo Generale, Azioni, A-F Procedimento, durate e avanzamento.",
+    key: "n_crono" as const,
+    label: "righe",
+  },
+  {
+    slug: "scadenze-go",
+    name: "Scadenze GO",
+    icon: "fa-play-circle",
+    color: "#16a34a",
+    desc: "Attività in avvio ordinate per data di Inizio (A – F Procedimento).",
+    key: "n_sca_go" as const,
+    label: "scadenze",
+  },
+  {
+    slug: "scadenze-stop",
+    name: "Scadenze STOP",
+    icon: "fa-flag-checkered",
+    color: "#ef4444",
+    desc: "Attività in conclusione ordinate per data di Fine (A – F Procedimento).",
+    key: "n_sca_stop" as const,
+    label: "scadenze",
+  },
+  {
+    slug: "timeline-milestone",
+    name: "Timeline - MILESTONE",
+    icon: "fa-diamond",
+    color: "#f59e0b",
+    desc: "Timeline orizzontale SVG con cerchi verdi (Risanamento) e quadrati blu (Realizzazione), marker OGGI.",
+    key: "n_milestone" as const,
+    label: "milestone",
+  },
+  {
+    slug: "gantt",
+    name: "Gantt",
+    icon: "fa-bars",
+    color: "#7c3aed",
+    desc: "Griglia calendario giornaliera con barre attività per task (compressione automatica degli X in range contigui).",
+    key: "n_gantt" as const,
+    label: "task rows",
+  },
+];
 
 export default async function AdminPage() {
-  const { sheets, stats } = await loadAdmin();
+  const stats = await loadStats();
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100vh" }}>
@@ -76,8 +106,7 @@ export default async function AdminPage() {
             <div className="logo-text">
               <h1>Bagnoli Monitor · Area Riservata</h1>
               <span>
-                Confronto 1:1 con Excel {`"MONITORAGGIO Cronoprogramma Prisco Ver. 2.12.xlsx"`} — schema{" "}
-                <code>bagnoli_cantieri</code> (Hetzner)
+                Confronto 1:1 con Excel <code>MONITORAGGIO Cronoprogramma Prisco Ver. 2.12.xlsx</code>
               </span>
             </div>
           </div>
@@ -88,136 +117,116 @@ export default async function AdminPage() {
       </header>
 
       <div className="container" style={{ padding: "32px 24px" }}>
-        {/* Stats sintesi */}
-        <div className="stato-grid">
-          <StatoCard color="blue" icon="fa-table" value={stats.tot_sheet} label="Sheet Excel importati" />
-          <StatoCard color="green" icon="fa-list-ul" value={stats.tot_excel_row} label="Righe Excel dump" />
-          <StatoCard color="orange" icon="fa-diagram-project" value={stats.tot_cup} label="CUP registrati" />
-          <StatoCard color="red" icon="fa-gavel" value={stats.tot_gare} label="Gare d'appalto" />
+        {/* Sintesi */}
+        <section
+          style={{
+            background: "#fff",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius)",
+            padding: 20,
+            boxShadow: "var(--shadow)",
+            marginBottom: 24,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
+            gap: 14,
+          }}
+        >
+          <Mini label="Task Cruscotto"    value={formatInt(stats.n_cruscotto)} />
+          <Mini label="Righe CronoProg."  value={formatInt(stats.n_crono)} />
+          <Mini label="Scadenze GO"       value={formatInt(stats.n_sca_go)} />
+          <Mini label="Scadenze STOP"     value={formatInt(stats.n_sca_stop)} />
+          <Mini label="Milestone"         value={formatInt(stats.n_milestone)} />
+          <Mini label="Righe Gantt"       value={formatInt(stats.n_gantt)} />
+          <Mini label="Budget totale"     value={formatMeur(stats.tot_budget)} />
+        </section>
+
+        {/* Indice 6 sheet */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill,minmax(320px,1fr))",
+            gap: 18,
+          }}
+        >
+          {SHEETS.map((s) => (
+            <Link
+              key={s.slug}
+              href={`/admin/sheet/${s.slug}`}
+              style={{
+                textDecoration: "none",
+                background: "#fff",
+                border: "1px solid var(--border)",
+                borderRadius: 14,
+                padding: 20,
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+                color: "var(--text)",
+                boxShadow: "var(--shadow)",
+                transition: "transform .15s, box-shadow .15s",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                <div
+                  style={{
+                    width: 52,
+                    height: 52,
+                    borderRadius: 12,
+                    background: s.color + "18",
+                    color: s.color,
+                    display: "grid",
+                    placeItems: "center",
+                    fontSize: 22,
+                  }}
+                >
+                  <i className={`fas ${s.icon}`}></i>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 800, fontSize: 17 }}>{s.name}</div>
+                  <div style={{ fontSize: 12, color: "var(--text3)" }}>
+                    {formatInt(stats[s.key])} {s.label}
+                  </div>
+                </div>
+                <i className="fas fa-arrow-right" style={{ color: s.color }}></i>
+              </div>
+              <div style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.5 }}>
+                {s.desc}
+              </div>
+            </Link>
+          ))}
         </div>
 
-        {/* Macro riepilogo importi */}
-        <section style={sectionStyle}>
-          <h3 style={sectionTitleStyle}>
-            <i className="fas fa-chart-pie"></i> Sintesi importazione
-          </h3>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 16 }}>
-            <MiniStat label="Task cronoprogramma" value={formatInt(stats.tot_task)} />
-            <MiniStat label="Fonti finanziamento" value={formatInt(stats.tot_fonti)} />
-            <MiniStat label="Budget complessivo" value={formatMeur(stats.tot_finanziamenti)} />
-            <MiniStat label="Avanzamento medio" value={formatPct(stats.pct_medio, 1)} />
-          </div>
-        </section>
-
-        {/* Indice sheet (come Excel) */}
-        <section style={sectionStyle}>
-          <h3 style={sectionTitleStyle}>
-            <i className="fas fa-file-excel"></i> Sheet Excel ({sheets.length})
-          </h3>
-          <p style={{ color: "var(--text3)", marginTop: -10, marginBottom: 14, fontSize: 13 }}>
-            Ogni sheet e&apos; accessibile come nell&apos;Excel originale, con la stessa
-            posizione e contenuto importato. Clicca su uno sheet per vederne il contenuto
-            tabellare come nel file sorgente.
-          </p>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))",
-              gap: 12,
-            }}
-          >
-            {sheets.map((s) => (
-              <Link
-                key={s.id}
-                href={`/admin/sheet/${slugify(s.sheet_name)}`}
-                style={{
-                  textDecoration: "none",
-                  background: "#fff",
-                  border: "1px solid var(--border)",
-                  borderRadius: 12,
-                  padding: "14px 16px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 6,
-                  color: "var(--text)",
-                  transition: "all .15s",
-                }}
-              >
-                <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".5px" }}>
-                  Sheet {s.ordine + 1}
-                </div>
-                <div style={{ fontWeight: 700, fontSize: 14 }}>{s.sheet_name}</div>
-                <div style={{ fontSize: 12, color: "var(--text2)" }}>
-                  {s.nrows} righe × {s.ncols} colonne
-                </div>
-              </Link>
-            ))}
-          </div>
-        </section>
-
-        <p style={{ marginTop: 32, fontSize: 12, color: "var(--text3)", textAlign: "center" }}>
-          Confronto Excel vs DB · Ogni sheet e&apos; leggibile per verifica manuale. Budget
-          complessivo (fonti finanziamento versione attiva): <strong>{formatMeur(stats.tot_finanziamenti)}</strong>
+        <p
+          style={{
+            marginTop: 32,
+            fontSize: 12,
+            color: "var(--text3)",
+            textAlign: "center",
+          }}
+        >
+          Ogni pagina replica struttura e valori del rispettivo sheet Excel. Apri un box
+          per visualizzarlo.
         </p>
       </div>
     </div>
   );
 }
 
-function StatoCard({
-  color,
-  icon,
-  value,
-  label,
-}: {
-  color: "blue" | "green" | "orange" | "red";
-  icon: string;
-  value: number | string;
-  label: string;
-}) {
+function Mini({ label, value }: { label: string; value: string }) {
   return (
-    <div className={`stato-card ${color}`}>
-      <div className="stato-icon">
-        <i className={`fas ${icon}`}></i>
-      </div>
-      <div className="stato-val">{typeof value === "number" ? formatInt(value) : value}</div>
-      <div className="stato-lbl">{label}</div>
-    </div>
-  );
-}
-
-function MiniStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      style={{
-        background: "#f8fafc",
-        border: "1px solid var(--border)",
-        borderRadius: 10,
-        padding: 14,
-      }}
-    >
-      <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 6 }}>
+    <div>
+      <div
+        style={{
+          fontSize: 11,
+          color: "var(--text3)",
+          textTransform: "uppercase",
+          letterSpacing: ".5px",
+          marginBottom: 4,
+        }}
+      >
         {label}
       </div>
-      <div style={{ fontSize: 20, fontWeight: 800 }}>{value}</div>
+      <div style={{ fontSize: 22, fontWeight: 800 }}>{value}</div>
     </div>
   );
 }
-
-const sectionStyle: React.CSSProperties = {
-  background: "#fff",
-  borderRadius: "var(--radius)",
-  border: "1px solid var(--border)",
-  padding: 24,
-  boxShadow: "var(--shadow)",
-  marginBottom: 24,
-};
-const sectionTitleStyle: React.CSSProperties = {
-  fontSize: 17,
-  fontWeight: 800,
-  marginBottom: 16,
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-  color: "var(--text)",
-};
