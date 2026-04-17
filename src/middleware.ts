@@ -33,12 +33,6 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Log per debug (visibile in docker logs)
-  if (token) {
-    console.log("[middleware] token invalido o scaduto: tokenLen=", token.length,
-                " session=", session, " secretLen=", secret.length);
-  }
-
   // Ricostruisci URL /login usando l'host forwarded da nginx (se presente)
   const forwardedHost = req.headers.get("x-forwarded-host") || req.headers.get("host") || req.nextUrl.host;
   const forwardedProto = req.headers.get("x-forwarded-proto") || req.nextUrl.protocol.replace(":", "");

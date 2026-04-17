@@ -52,40 +52,25 @@ export async function verifyToken(
 ): Promise<SessionPayload | null> {
   if (!token || typeof token !== "string") return null;
   const parts = token.split(".");
-  if (parts.length !== 2) {
-    console.log("[verify] wrong parts", parts.length);
-    return null;
-  }
+  if (parts.length !== 2) return null;
   const [body, sigB64] = parts;
   try {
     const key = await getKey(secret);
-    const sigBuf = b64urlDecode(sigB64);
-    // Cast esplicito a BufferSource per placare il TS 5.x
     const ok = await crypto.subtle.verify(
       "HMAC",
       key,
-      sigBuf as BufferSource,
+      b64urlDecode(sigB64) as BufferSource,
       enc.encode(body) as BufferSource
     );
-    if (!ok) {
-      console.log("[verify] sig mismatch bodyLen=", body.length, " sigLen=", sigB64.length);
-      return null;
-    }
-    const bodyBuf = b64urlDecode(body);
+    if (!ok) return null;
     const data = JSON.parse(
-      new TextDecoder().decode(new Uint8Array(bodyBuf))
+      new TextDecoder().decode(b64urlDecode(body))
     ) as SessionPayload;
-    if (!data.exp || typeof data.exp !== "number") {
-      console.log("[verify] no exp", data);
-      return null;
-    }
-    if (data.exp < Date.now()) {
-      console.log("[verify] expired", data.exp, "vs now", Date.now());
+    if (!data.exp || typeof data.exp !== "number" || data.exp < Date.now()) {
       return null;
     }
     return data;
-  } catch (e) {
-    console.log("[verify] exception", e);
+  } catch {
     return null;
   }
 }
