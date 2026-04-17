@@ -33,7 +33,6 @@ export async function POST(req: NextRequest) {
     rawNext = params.get("next") ?? "";
   }
 
-  console.log("[login] user=", user, " remember=", remember, " next=", rawNext);
   const next = safeNext(rawNext);
 
   const expectedUser = process.env.ADMIN_USER || "admin";
