@@ -17,14 +17,19 @@ type CronoRow = {
   superficie: string | null;
   area_tematica: string | null;
   unita_intervento: string | null;
-  cup: string | null;
-  processo: string | null;
-  fase_label: string | null;
-  descrizione: string | null;
+  cup1: string | null;
+  tipologia: string | null;
+  stato_proc_amm: string | null;
+  contratto: string | null;
+  oggetto: string | null;
+  a_procedimento: string | null;
+  b_sub_procedimento: string | null;
+  c_fase: string | null;
   data_inizio: string | null;
   data_fine: string | null;
   durata_giorni: number | null;
   pct_avanzamento: number | null;
+  attivita: string | null;
   row_idx: number;
 };
 
@@ -32,9 +37,11 @@ async function loadData() {
   return q<CronoRow>(`
     SELECT id, id_path, livello, star_marker, obiettivo_generale, obiettivi_specifici,
            azioni, sub_ambito, superficie, area_tematica, unita_intervento,
-           cup, processo, fase_label, descrizione,
+           cup1, tipologia, stato_proc_amm, contratto, oggetto,
+           a_procedimento, b_sub_procedimento, c_fase,
            data_inizio::text AS data_inizio, data_fine::text AS data_fine,
-           durata_giorni, pct_avanzamento::float AS pct_avanzamento, row_idx
+           durata_giorni, pct_avanzamento::float AS pct_avanzamento,
+           attivita, row_idx
       FROM bagnoli_cantieri.crono_task ORDER BY row_idx;
   `);
 }
@@ -110,7 +117,7 @@ export default async function CronoPage() {
         <table
           style={{
             width: "100%",
-            minWidth: 1100,
+            minWidth: 1400,
             borderCollapse: "collapse",
             fontSize: 12,
           }}
@@ -123,9 +130,12 @@ export default async function CronoPage() {
               <Th>Obiettivi Specifici</Th>
               <Th>Azioni</Th>
               <Th>Superficie</Th>
-              <Th>Area Tem.</Th>
-              <Th>Fase</Th>
-              <Th>Descrizione</Th>
+              <Th>Tipologia</Th>
+              <Th>Stato Proc.</Th>
+              <Th>Contratto</Th>
+              <Th>Oggetto</Th>
+              <Th>A – Procedimento</Th>
+              <Th>Attività</Th>
               <Th>Inizio</Th>
               <Th>Fine</Th>
               <Th style={{ textAlign: "right" }}>Durata</Th>
@@ -169,10 +179,37 @@ export default async function CronoPage() {
                   <Td>{short(r.obiettivi_specifici)}</Td>
                   <Td>{short(r.azioni)}</Td>
                   <Td>{short(r.superficie)}</Td>
-                  <Td>{short(r.area_tematica)}</Td>
-                  <Td style={{ fontSize: 11 }}>{short(r.fase_label)}</Td>
-                  <Td style={{ color: "#334155", maxWidth: 360 }}>
-                    {short(r.descrizione)}
+                  <Td style={{ fontSize: 11 }}>{short(r.tipologia)}</Td>
+                  <Td style={{ fontSize: 11 }}>{short(r.stato_proc_amm)}</Td>
+                  <Td style={{ fontSize: 11 }}>{short(r.contratto)}</Td>
+                  <Td style={{ fontSize: 11 }}>{short(r.oggetto)}</Td>
+                  <Td style={{ fontSize: 11, maxWidth: 240 }}>{short(r.a_procedimento)}</Td>
+                  <Td style={{ fontSize: 11 }}>
+                    {r.attivita && (
+                      <span
+                        style={{
+                          display: "inline-block",
+                          padding: "1px 6px",
+                          borderRadius: 3,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          background:
+                            r.attivita === "Avviata"
+                              ? "#dcfce7"
+                              : r.attivita === "CONCLUSA"
+                              ? "#dbeafe"
+                              : "#fee2e2",
+                          color:
+                            r.attivita === "Avviata"
+                              ? "#166534"
+                              : r.attivita === "CONCLUSA"
+                              ? "#1e40af"
+                              : "#991b1b",
+                        }}
+                      >
+                        {r.attivita}
+                      </span>
+                    )}
                   </Td>
                   <Td style={{ whiteSpace: "nowrap" }}>{formatDateShort(r.data_inizio)}</Td>
                   <Td style={{ whiteSpace: "nowrap" }}>{formatDateShort(r.data_fine)}</Td>

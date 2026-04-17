@@ -24,6 +24,25 @@ type Task = {
   row_idx: number;
 };
 
+type Slicers = {
+  ambito: string[];
+  obiettivo_generale: string[];
+  obiettivi_specifici: string[];
+  azioni: string[];
+  superficie: string[];
+  area_tematica: string[];
+  unita_intervento: string[];
+  tipologia: string[];
+  attivita: string[];
+  stato_proc: string[];
+  contratto: string[];
+  oggetto: string[];
+  livello: string[];
+  sub_livello: string[];
+  n_milestone: number;
+  n_interconnessioni: number;
+};
+
 async function loadData() {
   const tasks = await q<Task>(
     `SELECT id, id_crono, obiettivo_generale, obiettivi_specifici, azioni, sub_ambito,
@@ -32,11 +51,49 @@ async function loadData() {
             durata_giorni, pct_avanzamento::float AS pct_avanzamento, row_idx
        FROM bagnoli_cantieri.cruscotto_task ORDER BY row_idx;`
   );
-  return tasks;
+
+  const distinct = async (col: string) =>
+    (await q<{ v: string }>(
+      `SELECT DISTINCT ${col} AS v FROM bagnoli_cantieri.crono_task WHERE ${col} IS NOT NULL ORDER BY ${col}`
+    )).map((r) => r.v);
+
+  const [
+    ambito, obiettivo_generale, obiettivi_specifici, azioni,
+    superficie, area_tematica, unita_intervento, tipologia,
+    attivita, stato_proc, contratto, oggetto, livello, sub_livello,
+  ] = await Promise.all([
+    distinct("sub_ambito"),
+    distinct("obiettivo_generale"),
+    distinct("obiettivi_specifici"),
+    distinct("azioni"),
+    distinct("superficie"),
+    distinct("area_tematica"),
+    distinct("unita_intervento"),
+    distinct("tipologia"),
+    distinct("attivita"),
+    distinct("stato_proc_amm"),
+    distinct("contratto"),
+    distinct("oggetto"),
+    distinct("livello_proc"),
+    distinct("sub_livello_proc"),
+  ]);
+
+  const [meta] = await q<{ n_milestone: number; n_interconnessioni: number }>(
+    `SELECT
+       (SELECT COUNT(*)::int FROM bagnoli_cantieri.milestone_point) AS n_milestone,
+       COALESCE((SELECT SUM(n_interconnessioni)::int FROM bagnoli_cantieri.crono_task),0) AS n_interconnessioni`
+  );
+
+  const slicers: Slicers = {
+    ambito, obiettivo_generale, obiettivi_specifici, azioni,
+    superficie, area_tematica, unita_intervento, tipologia,
+    attivita, stato_proc, contratto, oggetto, livello, sub_livello,
+    ...meta,
+  };
+
+  return { tasks, slicers };
 }
 
-// Calcola KPI come Excel
-// Periodo fisso da Excel: "da 07/10/2021 a 30/06/2030"
 const PERIODO_INIZIO = new Date("2021-10-07");
 const PERIODO_FINE = new Date("2030-06-30");
 
@@ -45,8 +102,6 @@ function calcKpi(tasks: Task[]) {
   const notStarted = tasks.filter((t) => !t.pct_avanzamento).length;
   const inProgress = tasks.filter((t) => t.pct_avanzamento && t.pct_avanzamento > 0 && t.pct_avanzamento < 1).length;
   const completed = tasks.filter((t) => t.pct_avanzamento && t.pct_avanzamento >= 1).length;
-  // % giorni completati = (oggi - inizio periodo) / (fine periodo - inizio periodo)
-  // come mostra Excel nel donut (51,85% ad aprile 2026)
   const today = new Date();
   const totDays = (PERIODO_FINE.getTime() - PERIODO_INIZIO.getTime()) / 86400000;
   const elapsed = (today.getTime() - PERIODO_INIZIO.getTime()) / 86400000;
@@ -54,423 +109,459 @@ function calcKpi(tasks: Task[]) {
   return { n, notStarted, inProgress, completed, pctGiorni };
 }
 
-function uniqueVals(tasks: Task[], key: keyof Task): string[] {
-  const set = new Set<string>();
-  tasks.forEach((t) => {
-    const v = t[key];
-    if (v !== null && v !== undefined && String(v).trim() !== "") set.add(String(v));
-  });
-  return [...set].sort();
-}
-
-// Mini-Gantt bar: posizione relativa su orizzonte 2021-10 → 2030-06
-const HORIZON_START = new Date("2021-10-07");
-const HORIZON_END = new Date("2030-06-30");
-const HORIZON_DAYS = (HORIZON_END.getTime() - HORIZON_START.getTime()) / (1000 * 60 * 60 * 24);
-
-function barStyle(t: Task): React.CSSProperties {
-  if (!t.inizio || !t.fine) return { display: "none" };
-  const d0 = new Date(t.inizio).getTime();
-  const d1 = new Date(t.fine).getTime();
-  const startDays = (d0 - HORIZON_START.getTime()) / (1000 * 60 * 60 * 24);
-  const endDays = (d1 - HORIZON_START.getTime()) / (1000 * 60 * 60 * 24);
-  const left = Math.max(0, (startDays / HORIZON_DAYS) * 100);
-  const width = Math.max(0.3, ((endDays - startDays) / HORIZON_DAYS) * 100);
-  return { left: `${left}%`, width: `${width}%` };
-}
-
 export default async function CruscottoPage() {
-  const tasks = await loadData();
+  const { tasks, slicers } = await loadData();
   const kpi = calcKpi(tasks);
-
-  const filtri = {
-    ambito: uniqueVals(tasks, "sub_ambito"),
-    obiettivoGenerale: uniqueVals(tasks, "obiettivo_generale"),
-    obiettivoSpecifico: uniqueVals(tasks, "obiettivi_specifici"),
-    azioni: uniqueVals(tasks, "azioni"),
-    superficie: uniqueVals(tasks, "superficie"),
-    areaTematica: uniqueVals(tasks, "area_tematica"),
-    unitaIntervento: uniqueVals(tasks, "unita_intervento"),
-    tipologia: uniqueVals(tasks, "tipologia"),
-    attivita: uniqueVals(tasks, "attivita"),
-  };
-
-  // Mesi per header timeline
-  const months: { label: string; pct: number }[] = [];
-  const cur = new Date(HORIZON_START);
-  while (cur <= HORIZON_END) {
-    const m = cur.getMonth();
-    const y = cur.getFullYear();
-    const MONTHS_ABBR = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
-    months.push({
-      label: `${MONTHS_ABBR[m]}-${String(y).slice(2)}`,
-      pct: ((cur.getTime() - HORIZON_START.getTime()) / (HORIZON_END.getTime() - HORIZON_START.getTime())) * 100,
-    });
-    cur.setMonth(m + 1);
-  }
 
   return (
     <AdminSheetLayout
       active="cruscotto"
       title="Cruscotto"
-      subtitle="Dashboard di monitoraggio — replica dello sheet Excel «Cruscotto»"
+      subtitle="Replica dashboard Excel «Cruscotto» — confronto 1:1 con i valori del file originale"
     >
-      {/* Testata Commissario */}
+      {/* ======= QUADRO SINOTTICO (Header + KPI + Map) ======= */}
       <div
         style={{
-          background: "#c9d9b7",
-          border: "1px solid #9bb477",
-          padding: 20,
+          background: "#dce6cc",
+          border: "2px solid #7a8f5a",
+          borderRadius: 6,
+          padding: 14,
+          marginBottom: 14,
           display: "grid",
-          gridTemplateColumns: "auto 1fr auto",
-          gap: 20,
-          alignItems: "center",
-          borderRadius: 8,
-          marginBottom: 16,
+          gridTemplateColumns: "160px 1fr 320px 1fr 240px",
+          gap: 10,
+          alignItems: "stretch",
         }}
       >
-        {/* Stemma */}
-        <div
-          style={{
-            width: 90,
-            height: 90,
-            borderRadius: "50%",
-            background: "#fff",
-            border: "2px solid #7a8f5a",
-            display: "grid",
-            placeItems: "center",
-            fontSize: 30,
-            color: "#7a8f5a",
-          }}
-        >
-          <i className="fas fa-landmark"></i>
+        {/* Stemma + Struttura di Supporto */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+          <div
+            style={{
+              width: 100,
+              height: 100,
+              borderRadius: "50%",
+              background: "#fff",
+              border: "2px solid #7a8f5a",
+              display: "grid",
+              placeItems: "center",
+              color: "#7a8f5a",
+              fontSize: 30,
+            }}
+          >
+            <i className="fas fa-landmark"></i>
+          </div>
+          <div style={{ fontSize: 8, color: "#1e293b", textAlign: "center", lineHeight: 1.3 }}>
+            <strong>Commissariato</strong>
+            <br />
+            Bonifica Bagnoli Coroglio
+          </div>
         </div>
-        <div>
-          <div style={{ fontSize: 11, color: "#1f2937", fontWeight: 600 }}>
+
+        {/* Info Commissario */}
+        <div style={{ fontSize: 10, color: "#1e293b", lineHeight: 1.55, alignSelf: "center" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 6, color: "#0f172a" }}>
             Commissario Straordinario del Governo per la bonifica ambientale e rigenerazione urbana del sito di interesse nazionale Bagnoli Coroglio
           </div>
-          <div style={{ fontSize: 10, marginTop: 8, color: "#334155", lineHeight: 1.6 }}>
-            <div>
-              <strong>Commissario:</strong> Prof. G. MANFREDI (Sindaco di Napoli)
-            </div>
-            <div>
-              <strong>Sub Commissari:</strong> Prof. F. De Rossi – Notaio D. Falconio
-            </div>
-            <div>
-              <strong>Dirigenti:</strong> Dott. A. Auricchio – Ing. G. Napolitano
-            </div>
-          </div>
+          <div><strong>Commissario:</strong> Prof. G. MANFREDI (Sindaco di Napoli)</div>
+          <div><strong>Sub Commissari:</strong> Prof. F. De Rossi – Notaio D. Falconio</div>
+          <div><strong>Dirigenti:</strong> Dott. A. Auricchio – Ing. G. Napolitano</div>
         </div>
-        {/* Title */}
+
+        {/* Title box */}
         <div
           style={{
-            background: "#fff7cc",
-            border: "1px solid #e5c76b",
-            padding: "14px 22px",
-            borderRadius: 8,
+            background: "linear-gradient(180deg, #fff9d6 0%, #ffec9c 100%)",
+            border: "2px solid #d4a63c",
+            borderRadius: 6,
+            display: "grid",
+            placeItems: "center",
+            padding: 12,
+            fontWeight: 800,
+            color: "#0f172a",
             textAlign: "center",
           }}
         >
-          <div style={{ fontSize: 22, fontWeight: 700, color: "#1e293b" }}>
-            Monitoraggio Attività
-          </div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: "#0f172a" }}>
-            SIN <span style={{ color: "#000" }}>Bagnoli Coroglio</span>
+          <div>
+            <div style={{ fontSize: 22, lineHeight: 1.1 }}>Monitoraggio Attività</div>
+            <div style={{ fontSize: 26, color: "#000", marginTop: 4 }}>
+              SIN <span style={{ fontWeight: 900 }}>Bagnoli Coroglio</span>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* KPI Strip */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "auto 1fr 240px",
-          gap: 16,
-          marginBottom: 16,
-        }}
-      >
-        {/* Donut % giorni completati */}
+        {/* Donut + Avanzamento */}
         <div
           style={{
-            background: "#fff7cc",
-            border: "1px solid #e5c76b",
-            padding: 16,
-            borderRadius: 8,
-            textAlign: "center",
-            minWidth: 180,
+            display: "grid",
+            gridTemplateColumns: "140px 1fr",
+            gap: 10,
+            alignItems: "center",
           }}
         >
-          <div style={{ fontSize: 11, color: "#ef4444", fontWeight: 700, marginBottom: 8 }}>
-            % Giorni completati
-          </div>
-          <Donut pct={kpi.pctGiorni} />
-        </div>
-
-        {/* Avanzamento Attività */}
-        <div
-          style={{
-            background: "#f0fdf4",
-            border: "1px solid #bbf7d0",
-            padding: 14,
-            borderRadius: 8,
-          }}
-        >
-          <div style={{ fontSize: 18, color: "#0ea5e9", fontWeight: 700, textAlign: "center", marginBottom: 12 }}>
-            Avanzamento Attività
-          </div>
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              gap: 2,
-              alignItems: "stretch",
-            }}
-          >
-            <StatBox color="#ef4444" label="Non iniziati" value={kpi.notStarted} />
-            <StatBox color="#60a5fa" label="In avanzamento" value={kpi.inProgress} />
-            <StatBox color="#16a34a" label="Completati" value={kpi.completed} />
-          </div>
-        </div>
-
-        {/* Periodo */}
-        <div
-          style={{
-            background: "#c9d9b7",
-            border: "1px solid #9bb477",
-            padding: 14,
-            borderRadius: 8,
-            textAlign: "center",
-          }}
-        >
-          <div style={{ fontSize: 14, color: "#1e293b", fontWeight: 700, marginBottom: 6 }}>
-            Periodo
-          </div>
-          <div style={{ fontSize: 13, color: "#334155", fontStyle: "italic" }}>
-            da 07/10/2021 a 30/06/2030
-          </div>
-        </div>
-      </div>
-
-      {/* Slicer Filters */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr 1fr",
-          gap: 12,
-          marginBottom: 16,
-        }}
-      >
-        <Panel title="PRARU" accent="#f59e0b">
-          <Slicer label="Obiettivo Generale" values={filtri.obiettivoGenerale} />
-          <Slicer label="Obiettivi Specifici" values={filtri.obiettivoSpecifico} />
-          <Slicer label="Azioni" values={filtri.azioni} />
-          <Slicer label="Ambito" values={filtri.ambito} />
-        </Panel>
-        <Panel title="Territorio" accent="#16a34a">
-          <Slicer label="Superficie" values={filtri.superficie} />
-          <Slicer label="Area Tematica" values={filtri.areaTematica} />
-          <Slicer label="Unità d'Intervento" values={filtri.unitaIntervento} />
-          <Slicer label="Tipologia" values={filtri.tipologia} />
-        </Panel>
-        <Panel title="Procedimento Amministrativo" accent="#2563eb">
-          <Slicer label="Attività" values={filtri.attivita} />
-          <div
-            style={{
-              fontSize: 11,
-              color: "#64748b",
-              lineHeight: 1.6,
-              marginTop: 10,
-              padding: 8,
-              background: "#f8fafc",
+              background: "#fff9d6",
+              border: "2px solid #d4a63c",
               borderRadius: 6,
+              padding: 8,
+              textAlign: "center",
             }}
           >
-            Totale <strong>{kpi.n}</strong> attività registrate · orizzonte 2021–2030
-            <br />
-            Media % avanzamento: <strong>{kpi.pctGiorni.toFixed(2).replace(".", ",")}%</strong>
+            <div style={{ fontSize: 10, color: "#ef4444", fontWeight: 700, marginBottom: 2 }}>
+              % Giorni completati
+            </div>
+            <Donut pct={kpi.pctGiorni} />
           </div>
-        </Panel>
+          <div>
+            <div
+              style={{
+                fontSize: 15,
+                fontWeight: 800,
+                color: "#0ea5e9",
+                textAlign: "center",
+                marginBottom: 6,
+              }}
+            >
+              Avanzamento Attività
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, 1fr)",
+                border: "1px solid #0284c7",
+                borderRadius: 4,
+                overflow: "hidden",
+                fontSize: 10,
+                fontWeight: 700,
+                marginBottom: 6,
+                textAlign: "center",
+              }}
+            >
+              <div style={{ padding: "2px 4px", borderRight: "1px solid #0284c7" }}>
+                <span style={{ display: "inline-block", width: 8, height: 8, background: "#ef4444", marginRight: 3 }} />
+                Non iniziati
+              </div>
+              <div style={{ padding: "2px 4px", borderRight: "1px solid #0284c7" }}>
+                <span style={{ display: "inline-block", width: 8, height: 8, background: "#60a5fa", marginRight: 3 }} />
+                In avanzamento
+              </div>
+              <div style={{ padding: "2px 4px" }}>
+                <span style={{ display: "inline-block", width: 8, height: 8, background: "#16a34a", marginRight: 3 }} />
+                Completati
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr 1fr", gap: 0 }}>
+              <StatBox color="#ef4444" value={kpi.notStarted} />
+              <StatBox color="#60a5fa" value={kpi.inProgress} big />
+              <StatBox color="#16a34a" value={kpi.completed} />
+            </div>
+          </div>
+        </div>
+
+        {/* Mappa SIN + Milestone count */}
+        <div
+          style={{
+            background: "#fff",
+            border: "2px solid #0284c7",
+            borderRadius: 6,
+            padding: 8,
+            textAlign: "center",
+            fontSize: 11,
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+          }}
+        >
+          <div style={{ fontWeight: 700, color: "#0369a1", fontSize: 12 }}>
+            SIN Bagnoli Coroglio
+          </div>
+          <svg width="100%" height="80" viewBox="0 0 200 80" style={{ display: "block" }}>
+            {/* schizzo stilizzato dell'area */}
+            <defs>
+              <pattern id="sea" width="12" height="12" patternUnits="userSpaceOnUse">
+                <rect width="12" height="12" fill="#bae6fd" />
+                <circle cx="6" cy="6" r="1" fill="#0ea5e9" opacity=".4" />
+              </pattern>
+            </defs>
+            <rect x="0" y="55" width="200" height="25" fill="url(#sea)" />
+            <path d="M0 55 Q50 45, 100 50 T200 48 L200 55 Z" fill="#c9d9b7" stroke="#7a8f5a" strokeWidth="1" />
+            <path d="M40 40 L60 30 L90 32 L110 25 L140 28 L170 35 L190 45" fill="none" stroke="#7a8f5a" strokeWidth="1.5" />
+            <circle cx="110" cy="50" r="3" fill="#ef4444" />
+          </svg>
+          <div style={{ fontSize: 10, color: "#334155", display: "flex", justifyContent: "space-around" }}>
+            <span><strong style={{ color: "#f59e0b" }}>{slicers.n_milestone}</strong> MILESTONE</span>
+            <span><strong style={{ color: "#7c3aed" }}>{slicers.n_interconnessioni}</strong> Interconness.</span>
+          </div>
+        </div>
       </div>
 
-      {/* Task table con mini-Gantt */}
+      {/* ======= SLICER BAR (replica filtri Excel) ======= */}
       <div
         style={{
-          background: "#fff",
-          border: "1px solid var(--border)",
-          borderRadius: 8,
-          overflow: "hidden",
-          boxShadow: "var(--shadow)",
+          display: "grid",
+          gridTemplateColumns: "280px 1fr 1fr",
+          gap: 10,
+          marginBottom: 14,
         }}
       >
-        <div style={{ padding: "10px 14px", background: "#f8fafc", borderBottom: "1px solid var(--border)", fontSize: 13, fontWeight: 700 }}>
-          <i className="fas fa-list-check" style={{ marginRight: 8, color: "#2563eb" }}></i>
-          Tabella attività Cruscotto ({tasks.length} righe)
+        {/* Colonna 1: Ambito + Periodo */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <FilterBox title="Ambito" accent="#16a34a">
+            <Chips values={slicers.ambito} />
+          </FilterBox>
+          <FilterBox title="Periodo" accent="#0ea5e9">
+            <div style={{ textAlign: "center", fontSize: 13, fontStyle: "italic", color: "#334155", padding: "6px 0" }}>
+              <strong>da</strong> 07/10/2021 <strong>a</strong> 30/06/2030
+            </div>
+          </FilterBox>
+          <FilterBox title="Attività" accent="#0ea5e9">
+            <Chips values={slicers.attivita} />
+          </FilterBox>
+          <FilterBox title="Tipologia" accent="#0ea5e9">
+            <Chips values={slicers.tipologia} />
+          </FilterBox>
         </div>
 
-        {/* Header mesi scroll-sync */}
-        <div style={{ overflow: "auto", position: "relative" }}>
-          <div style={{ minWidth: 1400 }}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "60px 2fr 1.3fr 1fr 1fr 100px 100px 90px 80px 1fr",
-                gap: 0,
-                background: "#f1f5f9",
-                borderBottom: "2px solid #cbd5e1",
-                fontSize: 11,
-                fontWeight: 700,
-                textTransform: "uppercase",
-                color: "#64748b",
-                position: "sticky",
-                top: 0,
-                zIndex: 2,
-              }}
-            >
-              <Th>ID</Th>
-              <Th>Obiettivo</Th>
-              <Th>Superficie</Th>
-              <Th>Area Tem.</Th>
-              <Th>Unità</Th>
-              <Th>Inizio</Th>
-              <Th>Fine</Th>
-              <Th style={{ textAlign: "right" }}>Durata</Th>
-              <Th style={{ textAlign: "right" }}>% Avanz.</Th>
-              <Th>Gantt</Th>
+        {/* Colonna 2: PRARU (Obiettivo Generale / Specifici / Azioni) */}
+        <FilterBox title="PRARU" accent="#f59e0b" big>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div>
+              <Lbl>Obiettivo Generale</Lbl>
+              <Chips values={slicers.obiettivo_generale} />
             </div>
-
-            {tasks.map((t) => {
-              const pct = (t.pct_avanzamento ?? 0) * 100;
-              const st = barStyle(t);
-              const color = colorForMacro(t.obiettivo_generale);
-              return (
-                <div
-                  key={t.id}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "60px 2fr 1.3fr 1fr 1fr 100px 100px 90px 80px 1fr",
-                    gap: 0,
-                    borderBottom: "1px solid #f1f5f9",
-                    fontSize: 12,
-                    alignItems: "center",
-                  }}
-                >
-                  <Td bg="#eef2ff" mono>
-                    {t.id_crono}
-                  </Td>
-                  <Td>
-                    <span
-                      style={{
-                        display: "inline-block",
-                        padding: "2px 8px",
-                        borderRadius: 6,
-                        background: color + "22",
-                        color,
-                        fontWeight: 700,
-                        fontSize: 11,
-                        marginRight: 6,
-                      }}
-                    >
-                      {short(t.obiettivo_generale)}
-                    </span>
-                    <span style={{ fontSize: 11, color: "#64748b" }}>
-                      {short(t.obiettivi_specifici)} · {short(t.azioni)}
-                    </span>
-                  </Td>
-                  <Td>{t.superficie ?? "–"}</Td>
-                  <Td>{t.area_tematica ?? "–"}</Td>
-                  <Td>{t.unita_intervento ?? "–"}</Td>
-                  <Td>{formatDateShort(t.inizio)}</Td>
-                  <Td>{formatDateShort(t.fine)}</Td>
-                  <Td style={{ textAlign: "right", fontFamily: "monospace" }}>
-                    {t.durata_giorni ?? "–"}
-                  </Td>
-                  <Td
-                    style={{
-                      textAlign: "right",
-                      fontFamily: "monospace",
-                      fontWeight: 700,
-                      color: pct >= 100 ? "#16a34a" : pct > 0 ? "#2563eb" : "#ef4444",
-                    }}
-                  >
-                    {pct.toFixed(2).replace(".", ",")}%
-                  </Td>
-                  <Td style={{ padding: 4, position: "relative", background: "#fafbff" }}>
-                    <div
-                      style={{
-                        position: "relative",
-                        height: 16,
-                        background: "#e2e8f0",
-                        borderRadius: 2,
-                      }}
-                    >
-                      <div
-                        title={`${t.inizio} → ${t.fine}`}
-                        style={{
-                          position: "absolute",
-                          top: 0,
-                          bottom: 0,
-                          background: `linear-gradient(to right, ${color} ${pct}%, ${color}66 ${pct}%)`,
-                          border: `1px solid ${color}`,
-                          borderRadius: 2,
-                          ...st,
-                        }}
-                      />
-                    </div>
-                  </Td>
-                </div>
-              );
-            })}
-
-            {/* Timeline footer coi mesi */}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "60px 2fr 1.3fr 1fr 1fr 100px 100px 90px 80px 1fr",
-                gap: 0,
-                background: "#f8fafc",
-                borderTop: "2px solid #cbd5e1",
-                fontSize: 9,
-                color: "#64748b",
-                padding: "4px 0",
-              }}
-            >
-              <div style={{ gridColumn: "1 / span 9", padding: "0 8px" }}>
-                Periodo Gantt (asse orizzontale):
-              </div>
-              <div style={{ position: "relative", height: 18 }}>
-                {months.filter((_, i) => i % 3 === 0).map((m) => (
-                  <div
-                    key={m.label}
-                    style={{
-                      position: "absolute",
-                      left: `${m.pct}%`,
-                      fontSize: 8,
-                      color: "#64748b",
-                      whiteSpace: "nowrap",
-                      transform: "translateX(-50%)",
-                    }}
-                  >
-                    {m.label}
-                  </div>
-                ))}
-              </div>
+            <div>
+              <Lbl>Obiettivi Specifici</Lbl>
+              <Chips values={slicers.obiettivi_specifici} />
+            </div>
+            <div style={{ gridColumn: "1 / span 2" }}>
+              <Lbl>Azioni</Lbl>
+              <Chips values={slicers.azioni} />
             </div>
           </div>
-        </div>
+        </FilterBox>
+
+        {/* Colonna 3: Territorio */}
+        <FilterBox title="Territorio" accent="#16a34a" big>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div>
+              <Lbl>Superficie</Lbl>
+              <Chips values={slicers.superficie} />
+            </div>
+            <div>
+              <Lbl>Area Tematica</Lbl>
+              <Chips values={slicers.area_tematica} />
+            </div>
+            <div style={{ gridColumn: "1 / span 2" }}>
+              <Lbl>Unità d&apos;Intervento</Lbl>
+              <Chips values={slicers.unita_intervento} />
+            </div>
+          </div>
+        </FilterBox>
       </div>
+
+      {/* Procedimento Amministrativo - riga dedicata */}
+      <FilterBox title="Procedimento Amministrativo" accent="#2563eb" italic>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+          <div>
+            <Lbl>Stato Proc.Amm-vo</Lbl>
+            <Chips values={slicers.stato_proc} />
+          </div>
+          <div>
+            <Lbl>CONTRATTO</Lbl>
+            <Chips values={slicers.contratto} />
+          </div>
+          <div>
+            <Lbl>Oggetto</Lbl>
+            <Chips values={slicers.oggetto} />
+          </div>
+          <div>
+            <Lbl>Livello</Lbl>
+            <Chips values={slicers.livello} />
+          </div>
+          <div>
+            <Lbl>Sub Livello</Lbl>
+            <Chips values={slicers.sub_livello} />
+          </div>
+        </div>
+      </FilterBox>
+
+      {/* ======= TASK TABLE CON GANTT BARS ======= */}
+      <TaskTable tasks={tasks} />
     </AdminSheetLayout>
   );
 }
 
-function Panel({
+// =============== COMPONENTS ===============
+
+function FilterBox({
   title,
   accent,
   children,
+  big,
+  italic,
 }: {
   title: string;
   accent: string;
   children: React.ReactNode;
+  big?: boolean;
+  italic?: boolean;
 }) {
+  return (
+    <div
+      style={{
+        background: "#fff",
+        border: `1px solid ${accent}`,
+        borderRadius: 6,
+        overflow: "hidden",
+        boxShadow: "0 1px 2px rgba(0,0,0,.04)",
+        marginBottom: italic ? 14 : 0,
+      }}
+    >
+      <div
+        style={{
+          background: accent + "15",
+          padding: "5px 10px",
+          borderBottom: `1px solid ${accent}50`,
+          fontSize: 11,
+          fontWeight: 800,
+          color: accent,
+          textTransform: italic ? "none" : "uppercase",
+          letterSpacing: italic ? 0 : ".5px",
+          fontStyle: italic ? "italic" : "normal",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <span>{title}</span>
+        <i className="fas fa-filter" style={{ fontSize: 9, opacity: 0.6 }}></i>
+      </div>
+      <div style={{ padding: big ? 10 : 8 }}>{children}</div>
+    </div>
+  );
+}
+
+function Lbl({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        fontSize: 9,
+        color: "#64748b",
+        fontWeight: 700,
+        textTransform: "uppercase",
+        letterSpacing: ".3px",
+        marginBottom: 4,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Chips({ values }: { values: string[] }) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+      {values.map((v) => (
+        <span
+          key={v}
+          style={{
+            display: "inline-block",
+            padding: "2px 8px",
+            background: "#fff",
+            border: "1px solid #cbd5e1",
+            borderRadius: 4,
+            fontSize: 10,
+            color: "#1e293b",
+            whiteSpace: "nowrap",
+            maxWidth: 170,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+          title={v}
+        >
+          {v}
+        </span>
+      ))}
+      {values.length === 0 && (
+        <span style={{ fontSize: 10, color: "#94a3b8", fontStyle: "italic" }}>
+          (nessun valore)
+        </span>
+      )}
+    </div>
+  );
+}
+
+function StatBox({
+  color,
+  value,
+  big,
+}: {
+  color: string;
+  value: number;
+  big?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        background: color,
+        color: "#fff",
+        padding: big ? "10px 4px" : "10px 4px",
+        textAlign: "center",
+        fontWeight: 900,
+        borderRight: "1px solid rgba(255,255,255,.3)",
+      }}
+    >
+      <div style={{ fontSize: big ? 36 : 26, lineHeight: 1 }}>{value}</div>
+    </div>
+  );
+}
+
+function Donut({ pct }: { pct: number }) {
+  const r = 36;
+  const c = 2 * Math.PI * r;
+  const p = Math.min(100, Math.max(0, pct));
+  const dash = (p / 100) * c;
+  return (
+    <svg width="110" height="110" viewBox="0 0 110 110">
+      <circle cx="55" cy="55" r={r} fill="none" stroke="#e5e7eb" strokeWidth="12" />
+      <circle
+        cx="55"
+        cy="55"
+        r={r}
+        fill="none"
+        stroke="#16a34a"
+        strokeWidth="12"
+        strokeDasharray={`${dash} ${c}`}
+        transform="rotate(-90 55 55)"
+        strokeLinecap="round"
+      />
+      <text x="55" y="61" textAnchor="middle" fontSize="16" fontWeight="800" fill="#0f172a">
+        {p.toFixed(2).replace(".", ",")}%
+      </text>
+    </svg>
+  );
+}
+
+// Task table con Gantt
+const HORIZON_START = new Date("2021-10-07");
+const HORIZON_END = new Date("2030-06-30");
+const HORIZON_DAYS = (HORIZON_END.getTime() - HORIZON_START.getTime()) / 86400000;
+
+function TaskTable({ tasks }: { tasks: Task[] }) {
+  const months: { label: string; pct: number; isYear: boolean; year?: number }[] = [];
+  const MONTHS_ABBR = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
+  const cur = new Date(HORIZON_START);
+  while (cur <= HORIZON_END) {
+    const pct = ((cur.getTime() - HORIZON_START.getTime()) / 86400000) / HORIZON_DAYS * 100;
+    months.push({
+      label: `${MONTHS_ABBR[cur.getMonth()]}-${String(cur.getFullYear()).slice(2)}`,
+      pct,
+      isYear: cur.getMonth() === 0,
+      year: cur.getFullYear(),
+    });
+    cur.setMonth(cur.getMonth() + 1);
+  }
+
   return (
     <div
       style={{
@@ -478,97 +569,236 @@ function Panel({
         border: "1px solid var(--border)",
         borderRadius: 8,
         overflow: "hidden",
+        boxShadow: "var(--shadow)",
       }}
     >
       <div
         style={{
-          background: accent + "18",
-          color: accent,
-          padding: "8px 14px",
-          fontWeight: 800,
+          padding: "10px 14px",
+          background: "#f8fafc",
+          borderBottom: "1px solid var(--border)",
           fontSize: 13,
-          borderBottom: `2px solid ${accent}`,
+          fontWeight: 700,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
         }}
       >
-        {title}
+        <i className="fas fa-list-check" style={{ color: "#2563eb" }}></i>
+        Tabella Attività Cruscotto ({tasks.length} righe)
       </div>
-      <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-        {children}
-      </div>
-    </div>
-  );
-}
 
-function Slicer({ label, values }: { label: string; values: string[] }) {
-  if (!values.length) return null;
-  return (
-    <div>
-      <div style={{ fontSize: 11, color: "#64748b", fontWeight: 700, marginBottom: 4 }}>
-        {label}
-      </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-        {values.map((v) => (
-          <span
-            key={v}
+      <div style={{ overflow: "auto", maxHeight: "60vh" }}>
+        <div style={{ minWidth: 1600 }}>
+          {/* Header mesi */}
+          <div
             style={{
-              display: "inline-block",
-              padding: "3px 8px",
-              border: "1px solid #cbd5e1",
-              borderRadius: 6,
+              display: "grid",
+              gridTemplateColumns: "60px 80px 2fr 90px 90px 80px 1fr",
+              background: "#eaeff7",
+              borderBottom: "2px solid #cbd5e1",
               fontSize: 10,
+              fontWeight: 800,
+              textTransform: "uppercase",
               color: "#334155",
-              background: "#f8fafc",
+              position: "sticky",
+              top: 0,
+              zIndex: 3,
             }}
           >
-            {v}
-          </span>
-        ))}
+            <Th>% Avanz.</Th>
+            <Th>ID</Th>
+            <Th>Attività</Th>
+            <Th>Inizio</Th>
+            <Th>Fine</Th>
+            <Th style={{ textAlign: "right" }}>Durata</Th>
+            <Th style={{ position: "relative" }}>
+              <div style={{ position: "relative", height: 16 }}>
+                {months.map((m) =>
+                  m.isYear ? (
+                    <span
+                      key={m.label}
+                      style={{
+                        position: "absolute",
+                        left: `${m.pct}%`,
+                        fontSize: 9,
+                        fontWeight: 800,
+                        color: "#0ea5e9",
+                        transform: "translateX(-50%)",
+                      }}
+                    >
+                      {m.year}
+                    </span>
+                  ) : null
+                )}
+              </div>
+            </Th>
+          </div>
+
+          {tasks.map((t) => {
+            const color = colorForMacro(t.obiettivo_generale);
+            const pct = (t.pct_avanzamento ?? 0) * 100;
+            return (
+              <div
+                key={t.id}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "60px 80px 2fr 90px 90px 80px 1fr",
+                  borderBottom: "1px solid #f1f5f9",
+                  fontSize: 11,
+                  alignItems: "center",
+                  minHeight: 26,
+                }}
+              >
+                <Td
+                  style={{
+                    background: "#fce7f3",
+                    textAlign: "right",
+                    fontWeight: 800,
+                    color: pct >= 50 ? "#16a34a" : pct > 0 ? "#9f1239" : "#94a3b8",
+                    fontFamily: "ui-monospace,monospace",
+                  }}
+                >
+                  {pct.toFixed(2).replace(".", ",")}%
+                </Td>
+                <Td
+                  style={{
+                    fontFamily: "ui-monospace,monospace",
+                    fontWeight: 700,
+                    textAlign: "center",
+                    background: "#eef2ff",
+                  }}
+                >
+                  {t.id_crono}
+                </Td>
+                <Td>
+                  <span
+                    style={{
+                      display: "inline-block",
+                      padding: "1px 6px",
+                      background: color + "22",
+                      color,
+                      borderRadius: 3,
+                      fontWeight: 700,
+                      fontSize: 10,
+                      marginRight: 5,
+                    }}
+                  >
+                    {short(t.obiettivo_generale)}
+                  </span>
+                  <span style={{ fontSize: 10, color: "#475569" }}>
+                    {short(t.obiettivi_specifici)} · {short(t.superficie)}
+                  </span>
+                </Td>
+                <Td style={{ fontFamily: "ui-monospace,monospace" }}>
+                  {formatDateShort(t.inizio)}
+                </Td>
+                <Td style={{ fontFamily: "ui-monospace,monospace" }}>
+                  {formatDateShort(t.fine)}
+                </Td>
+                <Td style={{ textAlign: "right", fontFamily: "ui-monospace,monospace" }}>
+                  {t.durata_giorni}
+                </Td>
+                <Td style={{ padding: 3, position: "relative", background: "#fafbff" }}>
+                  <GanttBar task={t} color={color} />
+                </Td>
+              </div>
+            );
+          })}
+
+          {/* Footer months */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "60px 80px 2fr 90px 90px 80px 1fr",
+              background: "#eaeff7",
+              borderTop: "2px solid #cbd5e1",
+              fontSize: 8,
+              color: "#64748b",
+            }}
+          >
+            <div style={{ gridColumn: "1 / span 6", padding: "4px 10px", textAlign: "right", fontStyle: "italic" }}>
+              Orizzonte Gantt →
+            </div>
+            <div style={{ position: "relative", height: 20 }}>
+              {months.filter((_, i) => i % 3 === 0).map((m) => (
+                <span
+                  key={m.label}
+                  style={{
+                    position: "absolute",
+                    left: `${m.pct}%`,
+                    top: 4,
+                    fontSize: 8,
+                    transform: "translateX(-50%)",
+                    color: m.isYear ? "#0ea5e9" : "#64748b",
+                    fontWeight: m.isYear ? 700 : 400,
+                  }}
+                >
+                  {m.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function StatBox({ color, label, value }: { color: string; label: string; value: number }) {
+function GanttBar({ task, color }: { task: Task; color: string }) {
+  if (!task.inizio || !task.fine) return null;
+  const d0 = new Date(task.inizio).getTime();
+  const d1 = new Date(task.fine).getTime();
+  const left = Math.max(0, ((d0 - HORIZON_START.getTime()) / 86400000) / HORIZON_DAYS * 100);
+  const width = Math.max(0.3, ((d1 - d0) / 86400000) / HORIZON_DAYS * 100);
+  const pct = (task.pct_avanzamento ?? 0) * 100;
+  const today = new Date();
+  const todayPct = Math.min(100, Math.max(0, ((today.getTime() - HORIZON_START.getTime()) / 86400000) / HORIZON_DAYS * 100));
   return (
     <div
       style={{
-        background: color,
-        color: "#fff",
-        padding: "16px 8px",
-        textAlign: "center",
-        fontWeight: 800,
+        position: "relative",
+        height: 18,
+        background: "#e2e8f0",
+        borderRadius: 2,
+        overflow: "hidden",
       }}
     >
-      <div style={{ fontSize: 30, lineHeight: 1 }}>{value}</div>
-      <div style={{ fontSize: 10, fontWeight: 500, marginTop: 4, opacity: 0.9 }}>{label}</div>
-    </div>
-  );
-}
-
-function Donut({ pct }: { pct: number }) {
-  const r = 40;
-  const c = 2 * Math.PI * r;
-  const p = Math.min(100, Math.max(0, pct));
-  const dash = (p / 100) * c;
-  return (
-    <svg width="130" height="130" viewBox="0 0 130 130">
-      <circle cx="65" cy="65" r={r} fill="none" stroke="#e5e7eb" strokeWidth="14" />
-      <circle
-        cx="65"
-        cy="65"
-        r={r}
-        fill="none"
-        stroke="#16a34a"
-        strokeWidth="14"
-        strokeDasharray={`${dash} ${c}`}
-        strokeDashoffset="0"
-        transform="rotate(-90 65 65)"
-        strokeLinecap="round"
+      {/* OGGI line */}
+      <div
+        style={{
+          position: "absolute",
+          left: `${todayPct}%`,
+          top: 0,
+          bottom: 0,
+          width: 0,
+          borderLeft: "1px dashed #ef4444",
+          zIndex: 2,
+        }}
       />
-      <text x="65" y="72" textAnchor="middle" fontSize="20" fontWeight="800" fill="#0f172a">
-        {p.toFixed(2).replace(".", ",")}%
-      </text>
-    </svg>
+      <div
+        title={`${task.inizio} → ${task.fine} (${pct.toFixed(2)}%)`}
+        style={{
+          position: "absolute",
+          left: `${left}%`,
+          width: `${width}%`,
+          top: 2,
+          bottom: 2,
+          background: color + "33",
+          border: `1px solid ${color}`,
+          borderRadius: 2,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            height: "100%",
+            width: `${pct}%`,
+            background: color,
+          }}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -576,8 +806,8 @@ function Th({ children, style }: { children: React.ReactNode; style?: React.CSSP
   return (
     <div
       style={{
-        padding: "8px 10px",
-        borderRight: "1px solid #e2e8f0",
+        padding: "6px 10px",
+        borderRight: "1px solid #cbd5e1",
         ...style,
       }}
     >
@@ -586,25 +816,12 @@ function Th({ children, style }: { children: React.ReactNode; style?: React.CSSP
   );
 }
 
-function Td({
-  children,
-  style,
-  bg,
-  mono,
-}: {
-  children: React.ReactNode;
-  style?: React.CSSProperties;
-  bg?: string;
-  mono?: boolean;
-}) {
+function Td({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
     <div
       style={{
-        padding: "6px 10px",
+        padding: "4px 10px",
         borderRight: "1px solid #f1f5f9",
-        background: bg,
-        fontFamily: mono ? "ui-monospace, SFMono-Regular, monospace" : undefined,
-        fontSize: mono ? 11 : 12,
         overflow: "hidden",
         textOverflow: "ellipsis",
         whiteSpace: "nowrap",
