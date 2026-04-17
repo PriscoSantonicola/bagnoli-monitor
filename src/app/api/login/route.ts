@@ -29,7 +29,9 @@ export async function POST(req: NextRequest) {
   }
 
   if (user !== expectedUser || pass !== expectedPass) {
-    const url = new URL("/login", req.url);
+    const fh = req.headers.get("x-forwarded-host") || req.headers.get("host") || req.nextUrl.host;
+    const fp = req.headers.get("x-forwarded-proto") || req.nextUrl.protocol.replace(":", "");
+    const url = new URL(`${fp}://${fh}/login`);
     url.searchParams.set("err", "1");
     url.searchParams.set("next", next);
     return NextResponse.redirect(url, { status: 303 });
@@ -38,7 +40,10 @@ export async function POST(req: NextRequest) {
   const maxAgeMs = remember ? REMEMBER_MS : SESSION_MS;
   const token = await signToken({ u: user }, secret, maxAgeMs);
 
-  const url = new URL(next, req.url);
+  // Usa host forwarded da nginx reverse proxy
+  const forwardedHost = req.headers.get("x-forwarded-host") || req.headers.get("host") || req.nextUrl.host;
+  const forwardedProto = req.headers.get("x-forwarded-proto") || req.nextUrl.protocol.replace(":", "");
+  const url = new URL(`${forwardedProto}://${forwardedHost}${next}`);
   const res = NextResponse.redirect(url, { status: 303 });
   res.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,
