@@ -52,25 +52,34 @@ export async function verifyToken(
 ): Promise<SessionPayload | null> {
   if (!token || typeof token !== "string") return null;
   const parts = token.split(".");
-  if (parts.length !== 2) return null;
+  if (parts.length !== 2) {
+    console.log("[verify] wrong parts", parts.length);
+    return null;
+  }
   const [body, sigB64] = parts;
   try {
     const key = await getKey(secret);
-    const ok = await crypto.subtle.verify(
-      "HMAC",
-      key,
-      b64urlDecode(sigB64),
-      enc.encode(body)
-    );
-    if (!ok) return null;
+    const sigBuf = b64urlDecode(sigB64);
+    const ok = await crypto.subtle.verify("HMAC", key, sigBuf, enc.encode(body));
+    if (!ok) {
+      console.log("[verify] sig mismatch bodyLen=", body.length, " sigLen=", sigB64.length);
+      return null;
+    }
+    const bodyBuf = b64urlDecode(body);
     const data = JSON.parse(
-      new TextDecoder().decode(new Uint8Array(b64urlDecode(body)))
+      new TextDecoder().decode(new Uint8Array(bodyBuf))
     ) as SessionPayload;
-    if (!data.exp || typeof data.exp !== "number" || data.exp < Date.now()) {
+    if (!data.exp || typeof data.exp !== "number") {
+      console.log("[verify] no exp", data);
+      return null;
+    }
+    if (data.exp < Date.now()) {
+      console.log("[verify] expired", data.exp, "vs now", Date.now());
       return null;
     }
     return data;
-  } catch {
+  } catch (e) {
+    console.log("[verify] exception", e);
     return null;
   }
 }
