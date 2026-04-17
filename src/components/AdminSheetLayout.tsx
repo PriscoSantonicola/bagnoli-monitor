@@ -36,8 +36,25 @@ export function AdminSheetLayout({
               <span>{subtitle}</span>
             </div>
           </div>
-          <nav className="topnav">
+          <nav className="topnav" style={{ display: "flex", gap: 12, alignItems: "center" }}>
             <Link href="/admin">← Indice</Link>
+            <form action="/api/logout" method="POST" style={{ display: "inline" }}>
+              <button
+                type="submit"
+                style={{
+                  background: "transparent",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: 6,
+                  padding: "4px 10px",
+                  fontSize: 12,
+                  color: "#64748b",
+                  cursor: "pointer",
+                }}
+              >
+                <i className="fas fa-right-from-bracket" style={{ marginRight: 4 }}></i>
+                Esci
+              </button>
+            </form>
           </nav>
         </div>
       </header>

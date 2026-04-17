@@ -1,54 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verifyToken, SESSION_COOKIE } from "@/lib/session";
 
 /**
- * Basic HTTP Auth per /admin/*
+ * Protezione /admin/* tramite cookie di sessione firmato.
+ * No Basic Auth modale — redirect alla pagina /login.
  *
- * Credenziali da env:
- *   ADMIN_USER (default "admin")
- *   ADMIN_PASS (richiesto)
- *
- * Tutto il resto (frontend trasparenza, /api/public/*) e' pubblico.
+ * Env richieste:
+ *   ADMIN_USER     (default "admin")
+ *   ADMIN_PASS     (richiesto)
+ *   SESSION_SECRET (richiesto, min 32 char)
  */
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Solo l'area admin e' protetta
   if (!pathname.startsWith("/admin")) {
     return NextResponse.next();
   }
 
-  const expectedUser = process.env.ADMIN_USER || "admin";
+  const secret = process.env.SESSION_SECRET;
   const expectedPass = process.env.ADMIN_PASS;
-
-  // Se ADMIN_PASS non e' settata, blocca l'accesso per default
-  if (!expectedPass) {
-    return new NextResponse("Admin not configured", { status: 503 });
+  if (!secret || !expectedPass) {
+    return new NextResponse(
+      "Admin non configurato (manca SESSION_SECRET o ADMIN_PASS)",
+      { status: 503 }
+    );
   }
 
-  const auth = req.headers.get("authorization") || "";
-  if (auth.startsWith("Basic ")) {
-    const b64 = auth.slice(6).trim();
-    try {
-      const decoded = atob(b64);
-      const idx = decoded.indexOf(":");
-      if (idx >= 0) {
-        const user = decoded.slice(0, idx);
-        const pass = decoded.slice(idx + 1);
-        if (user === expectedUser && pass === expectedPass) {
-          return NextResponse.next();
-        }
-      }
-    } catch {
-      /* fallthrough a 401 */
-    }
+  const token = req.cookies.get(SESSION_COOKIE)?.value;
+  const session = await verifyToken(token, secret);
+  const expectedUser = process.env.ADMIN_USER || "admin";
+  if (session && session.u === expectedUser) {
+    return NextResponse.next();
   }
 
-  return new NextResponse("Authentication required", {
-    status: 401,
-    headers: {
-      "WWW-Authenticate": 'Basic realm="Bagnoli Monitor Admin", charset="UTF-8"',
-    },
-  });
+  const loginUrl = new URL("/login", req.url);
+  if (pathname !== "/admin") loginUrl.searchParams.set("next", pathname);
+  return NextResponse.redirect(loginUrl);
 }
 
 export const config = {
