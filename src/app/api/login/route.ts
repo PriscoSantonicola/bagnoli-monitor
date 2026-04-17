@@ -14,11 +14,27 @@ function safeNext(n: string | null | undefined): string {
 }
 
 export async function POST(req: NextRequest) {
-  const form = await req.formData();
-  const user = String(form.get("user") ?? "").trim();
-  const pass = String(form.get("pass") ?? "");
-  const remember = form.get("remember") === "on";
-  const next = safeNext(String(form.get("next") ?? ""));
+  const ct = req.headers.get("content-type") || "";
+  let user = "", pass = "", remember = false, rawNext = "";
+
+  if (ct.includes("application/x-www-form-urlencoded") || ct.includes("multipart/form-data")) {
+    const form = await req.formData();
+    user = String(form.get("user") ?? "").trim();
+    pass = String(form.get("pass") ?? "");
+    remember = form.get("remember") === "on" || form.get("remember") === "true";
+    rawNext = String(form.get("next") ?? "");
+  } else {
+    // Fallback: parse body come url-encoded
+    const body = await req.text();
+    const params = new URLSearchParams(body);
+    user = (params.get("user") ?? "").trim();
+    pass = params.get("pass") ?? "";
+    remember = params.get("remember") === "on" || params.get("remember") === "true";
+    rawNext = params.get("next") ?? "";
+  }
+
+  console.log("[login] user=", user, " remember=", remember, " next=", rawNext);
+  const next = safeNext(rawNext);
 
   const expectedUser = process.env.ADMIN_USER || "admin";
   const expectedPass = process.env.ADMIN_PASS || "";
