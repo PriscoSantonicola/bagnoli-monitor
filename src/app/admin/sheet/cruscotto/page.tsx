@@ -36,20 +36,21 @@ async function loadData() {
 }
 
 // Calcola KPI come Excel
+// Periodo fisso da Excel: "da 07/10/2021 a 30/06/2030"
+const PERIODO_INIZIO = new Date("2021-10-07");
+const PERIODO_FINE = new Date("2030-06-30");
+
 function calcKpi(tasks: Task[]) {
   const n = tasks.length;
   const notStarted = tasks.filter((t) => !t.pct_avanzamento).length;
   const inProgress = tasks.filter((t) => t.pct_avanzamento && t.pct_avanzamento > 0 && t.pct_avanzamento < 1).length;
   const completed = tasks.filter((t) => t.pct_avanzamento && t.pct_avanzamento >= 1).length;
-  // % giorni completati (ponderato per durata)
-  let totDur = 0, totDone = 0;
-  tasks.forEach((t) => {
-    const d = t.durata_giorni ?? 0;
-    const p = t.pct_avanzamento ?? 0;
-    totDur += d;
-    totDone += d * p;
-  });
-  const pctGiorni = totDur > 0 ? (totDone / totDur) * 100 : 0;
+  // % giorni completati = (oggi - inizio periodo) / (fine periodo - inizio periodo)
+  // come mostra Excel nel donut (51,85% ad aprile 2026)
+  const today = new Date();
+  const totDays = (PERIODO_FINE.getTime() - PERIODO_INIZIO.getTime()) / 86400000;
+  const elapsed = (today.getTime() - PERIODO_INIZIO.getTime()) / 86400000;
+  const pctGiorni = Math.min(100, Math.max(0, (elapsed / totDays) * 100));
   return { n, notStarted, inProgress, completed, pctGiorni };
 }
 
