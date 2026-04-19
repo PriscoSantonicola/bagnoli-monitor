@@ -4,6 +4,15 @@ Dashboard pubblico + area riservata per il **Programma di Rigenerazione Bagnoli-
 
 **Live:** https://monitoraggio.analist24.it.com
 
+📘 **Documentazione tecnica completa** in [`docs/`](./docs/README.md):
+[Architettura](./docs/ARCHITECTURE.md) ·
+[API Reference](./docs/API.md) ·
+[Database](./docs/DATABASE.md) ·
+[Algoritmi](./docs/ALGORITHMS.md) ·
+[Sicurezza](./docs/SECURITY.md) ·
+[Deployment](./docs/DEPLOYMENT.md) ·
+[Import dati](./docs/IMPORT-DATA.md)
+
 ## Stack
 
 - **Next.js 14** (App Router) – frontend React + route handler API
