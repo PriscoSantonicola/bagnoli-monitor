@@ -1,4 +1,4 @@
-import { Pool, PoolClient } from "pg";
+import { Pool } from "pg";
 
 /**
  * Pool singleton PostgreSQL (schema bagnoli_cantieri su Hetzner dev).
@@ -7,6 +7,11 @@ import { Pool, PoolClient } from "pg";
  *   DATABASE_URL = postgresql://user:pass@host:port/db?schema=bagnoli_cantieri
  *
  * search_path viene impostato esplicitamente in ogni connessione.
+ *
+ * Il pool è LAZY: viene costruito al primo utilizzo, non al load del modulo.
+ * Questo evita che `next build` fallisca quando DATABASE_URL non e' disponibile
+ * durante la fase di build (le pagine dinamiche non vengono chiamate ma il
+ * modulo viene comunque risolto / importato).
  */
 
 declare global {
@@ -33,15 +38,19 @@ function buildPool(): Pool {
   return pool;
 }
 
-export const pool: Pool = global.__pgPool ?? buildPool();
-if (process.env.NODE_ENV !== "production") global.__pgPool = pool;
+function getPool(): Pool {
+  if (global.__pgPool) return global.__pgPool;
+  const p = buildPool();
+  global.__pgPool = p;
+  return p;
+}
 
 export async function q<T = any>(sql: string, params: any[] = []): Promise<T[]> {
-  const r = await pool.query(sql, params);
+  const r = await getPool().query(sql, params);
   return r.rows as T[];
 }
 
 export async function q1<T = any>(sql: string, params: any[] = []): Promise<T | null> {
-  const r = await pool.query(sql, params);
+  const r = await getPool().query(sql, params);
   return (r.rows[0] as T) ?? null;
 }
