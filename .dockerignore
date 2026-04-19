@@ -1,0 +1,37 @@
+# Dipendenze e build Node
+node_modules
+.next
+out
+dist
+
+# Env locali - MAI dentro l'immagine
+.env
+.env.*
+!.env.example
+
+# Git + CI
+.git
+.gitignore
+.github
+
+# Python helper scripts (usano credenziali)
+_*.py
+_*.html
+_*.txt
+_*.sql
+
+# Editor/OS
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Docker stesso
+Dockerfile
+docker-compose.yml
+docker-run.sh
+.dockerignore
+
+# README e docs (non necessari dentro il container)
+README.md
+*.md

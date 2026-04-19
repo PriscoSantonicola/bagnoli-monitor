@@ -1,0 +1,78 @@
+# =====================================================================
+# Bagnoli Monitor – stack autoconsistente (docker compose)
+# ---------------------------------------------------------------------
+# Esegui dalla root del progetto:
+#   cp .env.example .env         # compilare SESSION_SECRET, ADMIN_PASS, DATABASE_URL
+#   docker compose up -d --build
+#   docker compose logs -f app
+#
+# Servizi:
+#   app      Next.js 14 standalone, Node 20 Alpine (pg pool verso Postgres esterno)
+#   db-dev   Postgres 16 locale, SOLO profilo "dev" (docker compose --profile dev up)
+#
+# Il DB di produzione e' su Hetzner (schema bagnoli_cantieri), fornito dall'admin.
+# Il servizio "db-dev" si attiva solo quando serve lavorare offline/senza rete Hetzner.
+# =====================================================================
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bagnoli-monitor:latest
+    container_name: bagnoli-monitor
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      # Bind su localhost: espone solo via nginx host (aaPanel / traefik / altro)
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "wget --spider -q http://127.0.0.1:3000/api/public/avanzamento || exit 1"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - bagnoli-net
+    # Permette al container di risolvere host.docker.internal (utile con db-dev locale)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # Postgres opzionale per sviluppo locale: docker compose --profile dev up
+  db-dev:
+    image: postgres:16-alpine
+    container_name: bagnoli-db-dev
+    restart: unless-stopped
+    profiles: ["dev"]
+    environment:
+      POSTGRES_DB: devbagnolicrm
+      POSTGRES_USER: devbagnolicrm
+      POSTGRES_PASSWORD: ${DB_DEV_PASSWORD:-dev_password_change_me}
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - bagnoli-db-data:/var/lib/postgresql/data
+      - ./schema_cantieri.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    networks:
+      - bagnoli-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devbagnolicrm -d devbagnolicrm"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+networks:
+  bagnoli-net:
+    driver: bridge
+
+volumes:
+  bagnoli-db-data:
+    driver: local

@@ -1,34 +1,50 @@
 #!/bin/bash
 # =====================================================================
-# Bagnoli Monitor — script deploy single container
+# Bagnoli Monitor - deploy via docker compose (stack autoconsistente)
 # =====================================================================
-# Uso: ./docker-run.sh (dalla cartella del progetto sul server)
+# Uso dalla cartella del progetto sul server:
+#   ./docker-run.sh
 # =====================================================================
 
 set -e
 
-IMAGE_NAME="bagnoli-monitor:latest"
-CONTAINER_NAME="bagnoli-monitor"
-PORT_HOST=3000
-PORT_CONTAINER=3000
-ENV_FILE=".env"
+if [ ! -f .env ]; then
+  echo "ERR: .env mancante. Copia .env.example e compila i valori." >&2
+  exit 1
+fi
 
-echo "==> Build immagine $IMAGE_NAME"
-docker build -t "$IMAGE_NAME" .
+# Rileva compose binary
+if docker compose version >/dev/null 2>&1; then
+  COMPOSE="docker compose"
+elif command -v docker-compose >/dev/null 2>&1; then
+  COMPOSE="docker-compose"
+else
+  echo "ERR: docker compose non trovato. Installa compose-v2 o docker-compose." >&2
+  exit 1
+fi
 
-echo "==> Stop container esistente (se presente)"
-docker stop  "$CONTAINER_NAME" 2>/dev/null || true
-docker rm    "$CONTAINER_NAME" 2>/dev/null || true
+echo "==> Usando: $COMPOSE"
 
-echo "==> Run nuovo container"
-docker run -d \
-  --name "$CONTAINER_NAME" \
-  --restart unless-stopped \
-  -p 127.0.0.1:${PORT_HOST}:${PORT_CONTAINER} \
-  --add-host=host.docker.internal:host-gateway \
-  --env-file "$ENV_FILE" \
-  "$IMAGE_NAME"
+# Stop legacy "docker run" container, se presente
+if docker inspect bagnoli-monitor >/dev/null 2>&1; then
+  RUNNING_FROM_COMPOSE=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' bagnoli-monitor 2>/dev/null || echo "")
+  if [ -z "$RUNNING_FROM_COMPOSE" ]; then
+    echo "==> Rilevato container legacy (docker run), rimuovo..."
+    docker stop bagnoli-monitor >/dev/null 2>&1 || true
+    docker rm   bagnoli-monitor >/dev/null 2>&1 || true
+  fi
+fi
 
-echo "==> Container avviato."
-echo "==> Logs live: docker logs -f $CONTAINER_NAME"
-echo "==> Test:      curl http://127.0.0.1:${PORT_HOST}/api/cruscotto"
+echo "==> Build immagine (no cache)"
+$COMPOSE build --no-cache app
+
+echo "==> Up servizio app"
+$COMPOSE up -d --force-recreate app
+
+echo "==> Stato servizi"
+$COMPOSE ps
+
+echo ""
+echo "==> Logs:   $COMPOSE logs -f app"
+echo "==> Test:   curl http://127.0.0.1:3000/api/public/avanzamento"
+echo "==> Shell:  docker exec -it bagnoli-monitor sh"
