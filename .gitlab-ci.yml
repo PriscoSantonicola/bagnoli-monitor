@@ -1,0 +1,89 @@
+# =====================================================================
+# Bagnoli Monitor — CI/CD GitLab
+# =====================================================================
+# Stages:
+#   build    Kaniko: build + push a GitLab Registry
+#   deploy   kubectl: apply manifest al cluster target (manuale)
+# =====================================================================
+
+variables:
+  IMAGE: $CI_REGISTRY_IMAGE
+  TAG: $CI_COMMIT_SHORT_SHA
+  KUBE_NAMESPACE: bagnoli-monitor
+
+stages:
+  - build
+  - deploy
+
+# ---------- BUILD ----------
+build:
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:v1.22.0-debug
+    entrypoint: [""]
+  script:
+    - mkdir -p /kaniko/.docker
+    - |
+      cat > /kaniko/.docker/config.json <<EOF
+      {
+        "auths": {
+          "$CI_REGISTRY": {
+            "auth": "$(printf '%s:%s' "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" | base64 | tr -d '\n')"
+          }
+        }
+      }
+      EOF
+    - >
+      /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "${CI_PROJECT_DIR}/Dockerfile"
+      --destination "$IMAGE:$TAG"
+      --destination "$IMAGE:latest"
+      --cache=true
+      --cache-ttl=168h
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# ---------- DEPLOY manuale al cluster ----------
+deploy:
+  stage: deploy
+  image: bitnami/kubectl:1.28
+  needs: ["build"]
+  when: manual
+  before_script:
+    - echo "$KUBECONFIG_DATA" | base64 -d > /tmp/kubeconfig
+    - export KUBECONFIG=/tmp/kubeconfig
+    - kubectl version --client
+  script:
+    # Crea namespace se non esiste
+    - kubectl apply -f k8s/namespace.yaml
+    # Aggiorna ConfigMap (NEXT_PUBLIC_SITE_URL, PORT, etc.)
+    - kubectl apply -f k8s/configmap.yaml
+    # Aggiorna Deployment con l'immagine del commit corrente
+    - >
+      sed -i "s|gitlab-dev.sviluppo-sw.it:5005/wish/bagnoli/demo-bagnoli-cantieri:latest|$IMAGE:$TAG|g"
+      k8s/deployment.yaml
+    - kubectl apply -f k8s/deployment.yaml
+    - kubectl apply -f k8s/service.yaml
+    - kubectl apply -f k8s/ingress.yaml
+    # Attendi il rollout
+    - kubectl -n $KUBE_NAMESPACE rollout status deployment/bagnoli-monitor --timeout=180s
+    # Smoke test
+    - kubectl -n $KUBE_NAMESPACE get pods,svc,ingress
+  environment:
+    name: kubernetes
+    url: https://bagnoli-monitor.sviluppo-sw.it
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# ---------- Smoke test post-deploy (opzionale) ----------
+smoke-test:
+  stage: deploy
+  image: curlimages/curl:8.4.0
+  needs: ["deploy"]
+  when: on_success
+  script:
+    - curl -sf --retry 3 --retry-delay 5 https://bagnoli-monitor.sviluppo-sw.it/api/public/avanzamento | grep '"totale"'
+    - curl -sf -o /dev/null -w "%{http_code}" https://bagnoli-monitor.sviluppo-sw.it/ | grep -q 200
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'

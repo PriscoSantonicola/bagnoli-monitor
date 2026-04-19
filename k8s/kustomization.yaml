@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: bagnoli-monitor
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+  # - hpa.yaml        # attivare quando metrics-server e' disponibile
+# Il Secret NON e' qui: va creato imperativamente (kubectl create secret generic)
+# o tramite Sealed Secrets / External Secrets.
+commonLabels:
+  app.kubernetes.io/name: bagnoli-monitor
+  app.kubernetes.io/part-of: bagnoli

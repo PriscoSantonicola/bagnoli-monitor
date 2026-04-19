@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bagnoli-monitor
+  namespace: bagnoli-monitor
+  labels:
+    app: bagnoli-monitor
+    app.kubernetes.io/name: bagnoli-monitor
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: bagnoli-monitor
+  template:
+    metadata:
+      labels:
+        app: bagnoli-monitor
+    spec:
+      # imagePullSecrets serve se il registry richiede autenticazione
+      # (es. GitLab Registry privato). Da creare con:
+      #   kubectl -n bagnoli-monitor create secret docker-registry gitlab-registry \
+      #     --docker-server=gitlab-dev.sviluppo-sw.it:5005 \
+      #     --docker-username=<user> --docker-password=<token>
+      imagePullSecrets:
+        - name: gitlab-registry
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+        - name: app
+          # Sostituire con il tag di build (GitLab CI riempie IMAGE_PLACEHOLDER)
+          image: gitlab-dev.sviluppo-sw.it:5005/wish/bagnoli/demo-bagnoli-cantieri:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: bagnoli-monitor-config
+            - secretRef:
+                name: bagnoli-monitor-secret
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /api/public/avanzamento
+              port: 3000
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/public/avanzamento
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /api/public/avanzamento
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12  # 60s totali per avviare
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false  # Next.js scrive in .next/cache
+            capabilities:
+              drop: ["ALL"]

@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bagnoli-monitor
+  namespace: bagnoli-monitor
+  labels:
+    app: bagnoli-monitor
+  annotations:
+    # nginx-ingress — forward degli header richiesti dall'app
+    nginx.ingress.kubernetes.io/use-forwarded-headers: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    # cert-manager: TLS Let's Encrypt automatico (rimuovere se non usato)
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - bagnoli-monitor.sviluppo-sw.it
+      secretName: bagnoli-monitor-tls
+  rules:
+    - host: bagnoli-monitor.sviluppo-sw.it
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bagnoli-monitor
+                port:
+                  number: 80

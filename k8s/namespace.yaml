@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bagnoli-monitor
+  labels:
+    app.kubernetes.io/name: bagnoli-monitor
+    app.kubernetes.io/part-of: bagnoli

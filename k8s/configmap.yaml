@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bagnoli-monitor-config
+  namespace: bagnoli-monitor
+  labels:
+    app: bagnoli-monitor
+data:
+  # Valori NON riservati. I segreti (DATABASE_URL, ADMIN_PASS, SESSION_SECRET)
+  # stanno nel Secret "bagnoli-monitor-secret" (vedi secret.example.yaml).
+  NEXT_PUBLIC_SITE_URL: "https://bagnoli-monitor.sviluppo-sw.it"
+  PORT: "3000"
+  NODE_ENV: "production"
+  ADMIN_USER: "admin"
